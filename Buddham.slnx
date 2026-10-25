@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="Buddham.Ai/Buddham.Ai.csproj" />
+  <Project Path="Buddham.Api/Buddham.Api.csproj" />
+  <Project Path="Buddham.Chat/Buddham.Chat.csproj" />
+  <Project Path="Buddham.Core/Buddham.Core.csproj" />
+  <Project Path="Buddham.Migrations/Buddham.Migrations.csproj" />
+  <Project Path="Buddham.Shared/Buddham.Shared.csproj" />
+</Solution>

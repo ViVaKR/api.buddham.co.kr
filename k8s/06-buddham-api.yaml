@@ -1,0 +1,120 @@
+# ==========================================
+# 2️⃣ 웹 비즈니스 본진 (Buddham.Api)
+# ------------------------------------------
+# 비밀 값은 모두 Secret 에서 주입합니다.
+#   - buddham-app-secret      : JWT, 관리자 계정 등 (envFrom 으로 일괄 주입)
+#   - buddham-postgres-secret : DefaultConnection
+#   - buddham-email-secret    : 메일 비밀번호
+#   우선순위: env(명시) > envFrom  → 아래 env 항목이 같은 이름의 envFrom 값을 덮어씁니다.
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buddham-api-deploy
+  namespace: buddham
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buddham-api
+  template:
+    metadata:
+      labels:
+        app: buddham-api
+    spec:
+      containers:
+        - name: buddham-api-container
+          image: buddham-api:net10
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+
+          # Secret 의 모든 키가 그대로 환경변수 이름이 됩니다.
+          # 예) JwtConfig__Key  →  .NET 에서 JwtConfig:Key
+          envFrom:
+            - secretRef:
+                name: buddham-app-secret
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: 'Production'
+            - name: ASPNETCORE_HTTP_PORTS
+              value: '8080'
+
+            # --- 연결 문자열 ---
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef:
+                  name: buddham-postgres-secret
+                  key: DefaultConnection
+            - name: ConnectionStrings__RedisConnection
+              value: 'buddham-redis-svc:6379,abortConnect=false'
+
+            # --- 외부 서비스 ---
+            - name: GrpcServices__AiService
+              value: 'http://buddham-ai-svc:50051'
+            - name: Ollama__BaseUrl
+              value: 'http://192.168.0.8:11434'
+            - name: Ollama__Model
+              value: 'bge-m3:latest'
+            - name: OllamaChat__BaseUrl
+              value: 'http://192.168.0.8:11434'
+            - name: OllamaChat__Model
+              value: 'dhamma-chat:latest'
+
+            # --- 이메일 ---
+            - name: EmailConfig__From
+              value: 'viv.buddha@gmail.com'
+            - name: EmailConfig__FromName
+              value: '정토사경'
+            - name: EmailConfig__Host
+              value: 'smtp.gmail.com'
+            - name: EmailConfig__Port
+              value: '587'
+            - name: EmailConfig__Password
+              valueFrom:
+                secretKeyRef:
+                  name: buddham-email-secret
+                  key: Password
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+          volumeMounts:
+            - name: api-storage
+              mountPath: /app/Storage
+      volumes:
+        - name: api-storage
+          hostPath:
+            path: /home/dharma/Kubs/Buddham/Storage
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buddham-api-svc
+  namespace: buddham
+spec:
+  type: NodePort
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 31380
+  selector:
+    app: buddham-api
