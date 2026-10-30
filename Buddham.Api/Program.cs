@@ -1,5 +1,4 @@
 using Buddham.Shared.Extensions;
-using Buddham.Shared.Protos.V1;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +30,7 @@ builder.Services.AddDatabases(builder.Configuration);
 builder.Services.AddRedisDatabase(builder.Configuration);
 
 // 🌟AI 워커와 소통할 gRPC 클라이언트 팩토리
-builder.Services.AddGrpcClient<AiEngine.AiEngineClient>(o => { o.Address = new Uri("http://buddham-ai-svc:50051"); });
+// builder.Services.AddGrpcClient<AiEngine.AiEngineClient>(o => { o.Address = new Uri("http://buddham-ai-svc:50051"); });
 
 var app = builder.Build();
 

@@ -436,3 +436,4 @@ $RECYCLE.BIN/
 /backup/**
 **/02-buddham-email-secret.yaml
 **/01-buddham-postgres-secret.yaml
+/buddham.Ai/
