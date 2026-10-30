@@ -38,7 +38,32 @@ spec:
               value: 'http://192.168.0.8:11434'
             - name: OllamaChat__Model
               value: 'dhamma-chat:latest'
-
+            # --- JWT (공유 확장 코드의 옵션 검증 통과용) ---
+            - name: JwtConfig__Key
+              valueFrom:
+                secretKeyRef:
+                  name: buddham-app-secret
+                  key: JwtConfig__Key
+            - name: JwtConfig__Issuer
+              valueFrom:
+                secretKeyRef:
+                  name: buddham-app-secret
+                  key: JwtConfig__Issuer
+            - name: JwtConfig__Audience
+              valueFrom:
+                secretKeyRef:
+                  name: buddham-app-secret
+                  key: JwtConfig__Audience
+            - name: JwtConfig__AccessTokenIn
+              valueFrom:
+                secretKeyRef:
+                  name: buddham-app-secret
+                  key: JwtConfig__AccessTokenIn
+            - name: JwtConfig__RefreshTokenIn
+              valueFrom:
+                secretKeyRef:
+                  name: buddham-app-secret
+                  key: JwtConfig__RefreshTokenIn
             # --- 연결 문자열 ---
             - name: ConnectionStrings__DefaultConnection
               valueFrom:

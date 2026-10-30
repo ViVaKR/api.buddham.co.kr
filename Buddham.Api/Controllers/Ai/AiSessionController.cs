@@ -6,7 +6,7 @@ using Buddham.Core.Interfaces.Ollama;
 using Buddham.Core.Schemas;
 using Buddham.Shared.Data;
 using Buddham.Shared.Infrastructure;
-using Buddham.Shared.Protos;
+using Buddham.Shared.Protos.V1;
 using Buddham.Shared.Services.OllamaService;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
@@ -14,7 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ChatMessage = Buddham.Core.Entities.Ai.ChatMessage;
-using ProtoChatMessage = Buddham.Shared.Protos.ProtoChatMessage;
+using ProtoChatMessage = Buddham.Shared.Protos.V1.ProtoChatMessage;
 
 namespace Buddham.Api.Controllers.Ai;
 

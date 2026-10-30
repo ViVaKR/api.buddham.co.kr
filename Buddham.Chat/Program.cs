@@ -1,7 +1,7 @@
 using Buddham.Chat.Hubs;
 using Buddham.Core.EnumTypes;
 using Buddham.Shared.Extensions;
-using Buddham.Shared.Protos;
+using Buddham.Shared.Protos.V1;
 using Microsoft.AspNetCore.Http.Connections;
 using Viva.Chat;
 
@@ -73,9 +73,10 @@ app.MapVivaChat();
 
 app.MapHub<AiChatHub>("/AiChatHub", options =>
 {
-    options.Transports = HttpTransportType.WebSockets;
+    options.Transports = HttpTransportType.WebSockets | HttpTransportType.ServerSentEvents;
     options.ApplicationMaxBufferSize = 262144;
     options.TransportMaxBufferSize = 262144;
-});
+    options.AllowStatefulReconnects = true;
+}).RequireAuthorization();
 
 app.Run();

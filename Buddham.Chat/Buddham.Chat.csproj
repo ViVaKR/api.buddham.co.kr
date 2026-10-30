@@ -21,13 +21,12 @@
 
     <ItemGroup>
         <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
-        <PackageReference Include="Grpc.Net.ClientFactory" Version="2.84.0" />
-        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
-        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.13" />
-        <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack"
-            Version="10.0.13" />
+        <PackageReference Include="Grpc.Net.ClientFactory" Version="2.85.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.14" />
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="10.0.14" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
         <PackageReference Include="ViVaKR.Chat" Version="0.1.0-preview.1" />
     </ItemGroup>
 

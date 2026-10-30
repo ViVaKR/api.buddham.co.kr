@@ -5,20 +5,20 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-      <UserSecretsId>98242625-abf5-4364-9ff7-847a64902d00</UserSecretsId>
-  </PropertyGroup>
+        <UserSecretsId>98242625-abf5-4364-9ff7-847a64902d00</UserSecretsId>
+    </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
         <PackageReference Include="FluentValidation" Version="12.2.0" />
         <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.2.0" />
-        <PackageReference Include="Grpc.Net.ClientFactory" Version="2.84.0" />
-        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
+        <PackageReference Include="Grpc.Net.ClientFactory" Version="2.85.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     </ItemGroup>
 
     <ItemGroup>
@@ -33,8 +33,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Folder Include="Controllers\Auth\" />
-        <Folder Include="Controllers\BaseControllers\" />
+        <Folder Include="Controllers/Auth/" />
+        <Folder Include="Controllers/BaseControllers/" />
     </ItemGroup>
 
 </Project>

@@ -30,9 +30,9 @@ for APP in buddham-ai buddham-api buddham-chat; do
 done
 
 echo "▶ [3/3] k8s 배포 (ai → api → chat 순서)..."
-kubectl apply -f k8s/application/buddham-ai.yaml   -n buddham
-kubectl apply -f k8s/application/buddham-api.yaml  -n buddham
-kubectl apply -f k8s/application/buddham-chat.yaml -n buddham
+kubectl apply -f k8s/buddham-ai.yaml   -n buddham
+kubectl apply -f k8s/buddham-api.yaml  -n buddham
+kubectl apply -f k8s/buddham-chat.yaml -n buddham
 
 kubectl rollout restart deployment/buddham-ai-deploy   -n buddham
 kubectl rollout restart deployment/buddham-api-deploy  -n buddham

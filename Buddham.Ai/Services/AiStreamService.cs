@@ -1,4 +1,4 @@
-using Buddham.Shared.Protos;
+using Buddham.Shared.Protos.V1;
 using Buddham.Shared.Services.OllamaService;
 using Grpc.Core;
 

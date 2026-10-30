@@ -177,6 +177,7 @@ public class TwoFactorService(
                 Token = string.Empty,
                 RefreshToken = string.Empty
             };
+            return Result<TwoFactorSchema.Identity>.Failure(RsCode.BadRequest, "잘못된 복구 코드입니다.");
         }
 
         // 성공 시 실패 횟수 리셋
@@ -187,7 +188,7 @@ public class TwoFactorService(
 
         var token = await tokenService.GenerateAccessTokenAsync(user);
         var refreshToken = tokenService.GenerateRefreshToken();
-
+        user.RefreshToken = refreshToken;
         await userManager.UpdateAsync(user);
 
         var isEmailConfirmed = await userManager.IsEmailConfirmedAsync(user);
@@ -227,13 +228,20 @@ public class TwoFactorService(
             return Result.Failure(RsCode.BadRequest, "2단계 인증 비활성화에 실패하였습니다.");
 
         await userManager.ResetAuthenticatorKeyAsync(user);
+        await userManager.SetTwoFactorEnabledAsync(user, false);
+        await userManager.ResetAuthenticatorKeyAsync(user);
+        user.TrustedDeviceKey = null; // 신뢰기기 해제
+        user.TrustedDeviceExpiry = null;
+        await userManager.UpdateAsync(user);
+        // 남은 복구코드도 폐기
+        await userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 0);
 
         return Result.Success("2단계 인증이 비활성화되었습니다.");
     }
 
     // ====== Helper 메서드들 ======
 
-    private string GenerateQrCodeUri(string email, string unformattedKey)
+    private static string GenerateQrCodeUri(string email, string unformattedKey)
     {
         const string authenticatorUriFormat = "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6";
         return string.Format(

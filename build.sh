@@ -3,9 +3,9 @@ APP=$1  # buddham-ai, buddham-api, buddham-chat
 TAG=net10
 
 case $APP in
-  buddham-api)  PROJECT_DIR="Buddham.Api" YAML="k8s/application/buddham-api.yaml" ;;
-  buddham-ai)   PROJECT_DIR="Buddham.Ai" YAML="k8s/application/buddham-ai.yaml" ;;
-  buddham-chat) PROJECT_DIR="Buddham.Chat" YAML="k8s/application/buddham-chat.yaml" ;;
+  buddham-api)  PROJECT_DIR="Buddham.Api" YAML="k8s/buddham-api.yaml" ;;
+  buddham-ai)   PROJECT_DIR="Buddham.Ai" YAML="k8s/buddham-ai.yaml" ;;
+  buddham-chat) PROJECT_DIR="Buddham.Chat" YAML="k8s/buddham-chat.yaml" ;;
   *) echo "❌ 알 수 없는 앱: $APP"; exit 1 ;;
 esac
 

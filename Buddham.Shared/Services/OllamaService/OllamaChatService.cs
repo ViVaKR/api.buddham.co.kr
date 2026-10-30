@@ -7,9 +7,9 @@ using Microsoft.Extensions.Options;
 
 namespace Buddham.Shared.Services.OllamaService;
 
-public class OllamaChatService(HttpClient httpClient, IOptions<OllamaChatOptions> options)
+public class OllamaChatService(HttpClient httpClient, IOptions<OllamaOptions> options)
 {
-    private readonly OllamaChatOptions _options = options.Value;
+    private readonly OllamaOptions _options = options.Value;
 
     private static readonly JsonSerializerOptions OllamaJsonOpts = new()
     {
@@ -169,25 +169,25 @@ public class OllamaChatService(HttpClient httpClient, IOptions<OllamaChatOptions
                 switch (inThink)
                 {
                     case true when buffered.Contains("</think>"):
-                    {
-                        var thoughtContent = buffered[..buffered.IndexOf("</think>", StringComparison.Ordinal)];
-                        var afterThink = buffered[(buffered.IndexOf("</think>", StringComparison.Ordinal) + 8)..];
-
-                        // thinking 필드가 없을 때만 content 파싱 결과 사용
-                        if (string.IsNullOrEmpty(chunk.Message?.Thinking))
-                            yield return new SseEvent("thinking", thoughtContent);
-
-                        inThink = false;
-                        thinkBuffer.Clear();
-
-                        if (!string.IsNullOrEmpty(afterThink))
                         {
-                            yield return new SseEvent("token", afterThink);
-                            thinkBuffer.Clear();
-                        }
+                            var thoughtContent = buffered[..buffered.IndexOf("</think>", StringComparison.Ordinal)];
+                            var afterThink = buffered[(buffered.IndexOf("</think>", StringComparison.Ordinal) + 8)..];
 
-                        break;
-                    }
+                            // thinking 필드가 없을 때만 content 파싱 결과 사용
+                            if (string.IsNullOrEmpty(chunk.Message?.Thinking))
+                                yield return new SseEvent("thinking", thoughtContent);
+
+                            inThink = false;
+                            thinkBuffer.Clear();
+
+                            if (!string.IsNullOrEmpty(afterThink))
+                            {
+                                yield return new SseEvent("token", afterThink);
+                                thinkBuffer.Clear();
+                            }
+
+                            break;
+                        }
                     case false when thinkBuffer.Length > 0:
                         yield return new SseEvent("token", thinkBuffer.ToString());
                         thinkBuffer.Clear();

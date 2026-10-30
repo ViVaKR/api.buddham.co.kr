@@ -16,7 +16,8 @@ using Buddham.Shared.Data;
 using Buddham.Shared.Filters;
 using Buddham.Shared.Infrastructure;
 using Buddham.Shared.Middlewares;
-using Buddham.Shared.Protos;
+// using Buddham.Shared.Protos;
+// using Buddham.Shared.Protos.V1;
 using Buddham.Shared.Services.Auth;
 using Buddham.Shared.Services.Cache;
 using Buddham.Shared.Services.Chat;
@@ -221,12 +222,13 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddAiServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // Ollama 옵션 — 모든 프로젝트 공통
-        services.AddOptions<OllamaChatOptions>()
-            .Bind(configuration.GetSection(OllamaChatOptions.SectionName))
+        // ollama options — 모든 프로젝트 공통
+        services.AddOptions<OllamaOptions>()
+            .Bind(configuration.GetSection(OllamaOptions.SectionName))
             .Validate(x => !string.IsNullOrEmpty(x.BaseUrl), "BaseUrl은 필수입니다.")
             .ValidateOnStart();
 
+        // ollama embeding
         var ollamaUrl = configuration["Ollama:BaseUrl"]
                         ?? throw new InvalidOperationException("Ollama:BaseUrl 설정이 빠졌습니다!");
 
@@ -236,21 +238,22 @@ public static class ServiceCollectionExtensions
             client.Timeout = TimeSpan.FromMinutes(5);
         });
 
+        // ollama chat
         var ollamaChatUrl = configuration["OllamaChat:BaseUrl"]
                             ?? throw new InvalidOperationException("OllamaChat:BaseUrl 설정이 빠졌습니다!");
 
         services.AddHttpClient<OllamaChatService>(client =>
         {
             client.BaseAddress = new Uri(ollamaChatUrl);
-            client.Timeout = TimeSpan.FromMinutes(5);
+            client.Timeout = Timeout.InfiniteTimeSpan;
         });
 
         // 👇 gRPC 클라이언트는 Api 프로젝트에서만!
-        var grpcUrl = configuration["GrpcServices:AiService"];
-        if (!string.IsNullOrEmpty(grpcUrl))
-        {
-            services.AddGrpcClient<AiEngine.AiEngineClient>(o => { o.Address = new Uri(grpcUrl); });
-        }
+        // var grpcUrl = configuration["GrpcServices:AiService"];
+        // if (!string.IsNullOrEmpty(grpcUrl))
+        // {
+        //     services.AddGrpcClient<AiEngine.AiEngineClient>(o => { o.Address = new Uri(grpcUrl); });
+        // }
 
         return services;
     }
@@ -276,6 +279,7 @@ public static class ServiceCollectionExtensions
             case BuddhamProjectMode.Chat:
                 services.AddScoped<IChatRoomService, ChatRoomService>();
                 services.AddScoped<IChatMessageService, ChatMessageService>();
+
                 services.AddScoped<IUserService, UserService>();
                 services.AddScoped<IUserRoleService, UserRoleService>();
                 services.AddScoped<ITokenService, TokenService>();

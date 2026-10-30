@@ -3,7 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using Buddham.Core.Entities.Ai;
 using Buddham.Shared.Data;
-using Buddham.Shared.Protos;
+using Buddham.Shared.Protos.V1;
 using Grpc.Core;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;

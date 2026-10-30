@@ -1,13 +1,14 @@
 syntax = "proto3";
 
-option csharp_namespace = "Buddham.Shared.Protos";
+// v1/ai.proto
+package ai.v1;
 
-package ai;
+option csharp_namespace = "Buddham.Shared.Protos.V1";
 
 // AI 연산 담당 서비스 정의
 service AiEngine {
   // 사용자가 화두를 던지면, AI가 글자를 스트리밍(stream)으로 타다닥 뱉어냄!
-  rpc AskStream (AiRequest) returns (stream AiResponse);
+  rpc AskStream(AiRequest) returns (stream AiResponse);
 }
 
 // 요청 데이터 주머니
@@ -21,16 +22,19 @@ message ProtoChatMessage {
   string role = 1;
   string content = 2;
 }
+
+// proto3 규칙: enum 0번은 항상 UNSPECIFIED/UNKNOWN으로 예약
 enum ResponseType {
-  RESPONSE_TYPE_UNSPECIFIED = 0;  // proto3 규칙: enum 0번은 항상 UNSPECIFIED/UNKNOWN으로 예약
+  RESPONSE_TYPE_UNSPECIFIED = 0;
   TOKEN = 1;
   THINKING = 2;
   DONE = 3;
   ERROR = 4;
 }
+
 // 응답 데이터 주머니
 message AiResponse {
-  string type = 1;   // "token" | "thinking" | "done"
-  string data = 2;   // 실제 내용
+  string type = 1; // "token" | "thinking" | "done"
+  string data = 2; // 실제 내용
   string error_code = 3;
 }

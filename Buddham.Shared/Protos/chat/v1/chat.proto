@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+// chat/v1/chat.proto
+package chat.v1;
+
+option csharp_namespace = "Buddham.Shared.Protos.chat.V1";
+
+// ChatService
+// ChatService.ChatServiceBase
+// ChatService.ChatServiceClient
+service ChatService {
+  rpc Ask(AskRequest) returns (stream AskResponse);
+}
+
+
+enum ResponseType {
+  UNSPECIFIED = 0;
+  TOKEN = 1;
+  THINKING = 2;
+  DONE = 3;
+  ERROR = 4;
+}
+
+enum Role {
+  // Protobuf enum 의 권장 관례 (기본값)
+  ROLE_UNSPECIFIED = 0;
+  ROLE_USER = 1;
+  ROLE_ASSISTANT = 2;
+  ROLE_SYSTEM = 3;
+  ROLE_TOOL = 4;
+}
+
+// class ChatMessage
+message ChatMessage {
+  // "user" | "assistant"
+  Role role = 1;
+  string content = 2;
+}
+
+// class AskRequest
+message AskRequest {
+
+  // string Question
+  string question = 1;
+
+  // RepeatedField<ChatMessage> History
+  repeated ChatMessage history = 2; // 이전 대화
+}
+
+message AskResponse {
+  string text = 1;
+
+  // bool IsThinking
+  // true: 사고과정 토큰
+  bool is_thinking = 2;
+}

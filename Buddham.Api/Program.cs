@@ -1,6 +1,5 @@
 using Buddham.Shared.Extensions;
-using Buddham.Shared.Protos;
-using Buddham.Shared.Seeds;
+using Buddham.Shared.Protos.V1;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,10 +41,10 @@ app.MapControllers();
 
 app.UseCommonHealthChecks();
 
+await app.RunAsync();
+
+// app.Run();
 // if (app.Environment.IsDevelopment())
 // {
 //     await app.SeedGuideASync();
 // }
-
-// app.Run();
-await app.RunAsync();

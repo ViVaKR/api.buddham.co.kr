@@ -1,3 +1,4 @@
+using Buddham.Ai;
 using Buddham.Ai.Services;
 using Buddham.Core.EnumTypes;
 using Buddham.Shared.Extensions;
@@ -18,6 +19,7 @@ builder.Services.AddControllerServices();
 // * 3 JWT Authentication
 builder.Services.AddJwtAuthentication(builder.Configuration);
 
+// gRPC 서버 기능 활성화
 builder.Services.AddGrpc();
 
 // * 5. Ai & Vector
