@@ -6,6 +6,21 @@
 #   - vivabm-data-secret    : 중앙 DB 마스터 시크릿 (vivabm-data 네임스페이스에서 공수)
 #   - buddham-email-secret  : 메일 비밀번호
 # ==========================================
+
+# --- 업로드/스토리지용 PVC (Retain: PVC 삭제 시에도 데이터 보존) ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buddham-api-storage-pvc
+  namespace: buddham
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path-retain
+  resources:
+    requests:
+      storage: 10Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,12 +36,25 @@ spec:
       labels:
         app: buddham-api
     spec:
+      # 👇 볼륨 쓰기 권한용 (runAsUser 1000 과 맞춤)
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: buddham-api-container
           image: kimbumjun/buddham-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          # Talos 보안 정책(Restricted)을 만족시키는 보안 컨텍스트
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
 
           # Secret 의 모든 키가 그대로 환경변수 이름이 됩니다.
           envFrom:
@@ -38,12 +66,15 @@ spec:
             - name: ASPNETCORE_HTTP_PORTS
               value: '8080'
 
+            # --- 파일 저장 경로 (PVC 마운트 경로와 대소문자 일치) ---
+            - name: FileStorage__BasePath
+              value: '/app/Storage'
+
             # --- 중앙 DB 시크릿(vivabm-data-secret)에서 비밀번호를 안전하게 추출하여 연결 문자열 조립 ---
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: vivabm-data-secret
-                  namespace: vivabm-data
+                  name: buddham-db-secret
                   key: BUDDHAM_MASTER_PASSWORD
 
             - name: ConnectionStrings__DefaultConnection
@@ -93,9 +124,8 @@ spec:
               mountPath: /app/Storage
       volumes:
         - name: api-storage
-          hostPath:
-            path: /home/dharma/Kubs/Buddham/Storage
-            type: DirectoryOrCreate
+          persistentVolumeClaim:
+            claimName: buddham-api-storage-pvc
 ---
 apiVersion: v1
 kind: Service

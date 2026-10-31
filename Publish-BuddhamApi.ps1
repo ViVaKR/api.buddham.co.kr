@@ -5,12 +5,10 @@
 
 $ErrorActionPreference = "Stop"
 
-$env:KUBECONFIG = "$HOME/.kube/config"
-
 $ImageName = "kimbumjun/buddham-api"
-$Tag = "v1.1.0"
+$Tag = "v1.1.1"
 
-Write-Host "▶ [1/3] 구시대의 유물(amd64)을 도려내고 오직 ARM64로 직행합니다..." -ForegroundColor Cyan
+Write-Host "▶ [1/3] 오직 ARM64 빌드..." -ForegroundColor Cyan
 
 # x86 따위는 찾지 않고 순수한 시대정신으로 빌드 & 푸시
 docker buildx build `
