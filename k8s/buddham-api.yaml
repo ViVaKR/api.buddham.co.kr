@@ -75,7 +75,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: buddham-db-secret
-                  key: BUDDHAM_MASTER_PASSWORD
+                  key: BUDDHAM_PASSWORD
 
             - name: ConnectionStrings__DefaultConnection
               value: 'Host=postgres-svc.vivabm-data.svc.cluster.local;Port=5432;Database=buddham;Username=buddham;Password=$(DB_PASSWORD);SSL Mode=Prefer;Trust Server Certificate=true;Pooling=true;Maximum Pool Size=50;'

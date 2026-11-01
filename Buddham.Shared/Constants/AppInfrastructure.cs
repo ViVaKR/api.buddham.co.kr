@@ -9,6 +9,7 @@ public static class AppInfrastructure
     public const string ProtectionName = "Buddham.App";
     public const string MigrationsAssembly = "Buddham.Migrations";
     public const string DefaultConnection = "DefaultConnection";
+    public const string MigrationConnection = "MigrationConnection";
     public const string RedisConnection = "RedisConnection";
     public const string MigrationHistoryTable = "ef_migrations_history";
     public const string CorsPolicy = "CorsPolicy";

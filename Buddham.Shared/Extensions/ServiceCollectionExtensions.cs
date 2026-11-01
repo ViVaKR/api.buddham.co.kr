@@ -6,7 +6,6 @@ using Buddham.Core.Entities.Comment;
 using Buddham.Core.EnumTypes;
 using Buddham.Core.Interfaces.Auth;
 using Buddham.Core.Interfaces.Cache;
-using Buddham.Core.Interfaces.Chat;
 using Buddham.Core.Interfaces.Comment;
 using Buddham.Core.Interfaces.Log;
 using Buddham.Core.Interfaces.Ollama;
@@ -16,11 +15,8 @@ using Buddham.Shared.Data;
 using Buddham.Shared.Filters;
 using Buddham.Shared.Infrastructure;
 using Buddham.Shared.Middlewares;
-// using Buddham.Shared.Protos;
-// using Buddham.Shared.Protos.V1;
 using Buddham.Shared.Services.Auth;
 using Buddham.Shared.Services.Cache;
-using Buddham.Shared.Services.Chat;
 using Buddham.Shared.Services.Comment;
 using Buddham.Shared.Services.Log;
 using Buddham.Shared.Services.OllamaService;
@@ -222,11 +218,6 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddAiServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // ollama options — 모든 프로젝트 공통
-        services.AddOptions<OllamaOptions>()
-            .Bind(configuration.GetSection(OllamaOptions.SectionName))
-            .Validate(x => !string.IsNullOrEmpty(x.BaseUrl), "BaseUrl은 필수입니다.")
-            .ValidateOnStart();
 
         // ollama embeding
         var ollamaUrl = configuration["Ollama:BaseUrl"]
@@ -237,23 +228,6 @@ public static class ServiceCollectionExtensions
             client.BaseAddress = new Uri(ollamaUrl);
             client.Timeout = TimeSpan.FromMinutes(5);
         });
-
-        // ollama chat
-        var ollamaChatUrl = configuration["OllamaChat:BaseUrl"]
-                            ?? throw new InvalidOperationException("OllamaChat:BaseUrl 설정이 빠졌습니다!");
-
-        services.AddHttpClient<OllamaChatService>(client =>
-        {
-            client.BaseAddress = new Uri(ollamaChatUrl);
-            client.Timeout = Timeout.InfiniteTimeSpan;
-        });
-
-        // 👇 gRPC 클라이언트는 Api 프로젝트에서만!
-        // var grpcUrl = configuration["GrpcServices:AiService"];
-        // if (!string.IsNullOrEmpty(grpcUrl))
-        // {
-        //     services.AddGrpcClient<AiEngine.AiEngineClient>(o => { o.Address = new Uri(grpcUrl); });
-        // }
 
         return services;
     }
@@ -277,9 +251,6 @@ public static class ServiceCollectionExtensions
         {
             // [Chat]
             case BuddhamProjectMode.Chat:
-                services.AddScoped<IChatRoomService, ChatRoomService>();
-                services.AddScoped<IChatMessageService, ChatMessageService>();
-
                 services.AddScoped<IUserService, UserService>();
                 services.AddScoped<IUserRoleService, UserRoleService>();
                 services.AddScoped<ITokenService, TokenService>();
@@ -344,36 +315,10 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// 7. PostgreSQL Database
     /// </summary>
-    public static IServiceCollection AddDatabases(
-        this IServiceCollection services,
-        IConfiguration configuration,
-        bool onlyChatContext = false,
-        bool onlyAiContext = false)
+    public static IServiceCollection AddDatabases(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString(AppInfrastructure.DefaultConnection) ??
         throw new Exception("Default connection string is missing!");
-
-        if (onlyChatContext)
-        {
-            // 채팅방 굴릴 때 필수적인 '인증(Auth)'과 '채팅(Chat)' 영토만 쏙 골라 주입!
-            RegisterBuddhamDbContext<BuddhamDbContext>(SchemaTypes.Auth);
-            RegisterBuddhamDbContext<ChatDbContext>(SchemaTypes.Chat);
-            RegisterBuddhamDbContext<AiDbContext>(SchemaTypes.Ai);
-            RegisterBuddhamDbContext<LogDbContext>(SchemaTypes.Log);
-            return services;
-        }
-
-        if (onlyAiContext)
-        {
-            RegisterBuddhamDbContext<BuddhamDbContext>(SchemaTypes.Auth);
-            RegisterBuddhamDbContext<AiDbContext>(SchemaTypes.Ai);
-            RegisterBuddhamDbContext<ChatDbContext>(SchemaTypes.Chat);
-            RegisterBuddhamDbContext<LogDbContext>(SchemaTypes.Log);
-            return services;
-        }
-
-        // 1. [Ai] 스키마 영토
-        RegisterBuddhamDbContext<AiDbContext>(SchemaTypes.Ai);
 
         // 2. [Archive] 스키마 영토
         RegisterBuddhamDbContext<ArchiveDbContext>(SchemaTypes.Archive);
@@ -384,14 +329,8 @@ public static class ServiceCollectionExtensions
         // 4. [Canon] 스키마 영토 (🚨 복붙 탈출 완료!)
         RegisterBuddhamDbContext<CanonDbContext>(SchemaTypes.Canon);
 
-        // 5. [Chat] 스키마 영토 (🚨 복붙 탈출 완료!)
-        RegisterBuddhamDbContext<ChatDbContext>(SchemaTypes.Chat);
-
         // 6. [Comment] 스키마 영토
         RegisterBuddhamDbContext<CommentDbContext>(SchemaTypes.Comment);
-
-        // 7. [Dharma] 스키마 영토 (🚨 Comment 명찰 떼고 진짜 내 이름 찾음!)
-        RegisterBuddhamDbContext<DharmaDbContext>(SchemaTypes.Dharma);
 
         // 8. [Log] 스키마 영토
         RegisterBuddhamDbContext<LogDbContext>(SchemaTypes.Log);
@@ -402,22 +341,8 @@ public static class ServiceCollectionExtensions
         // 10. [Pitaka] 스키마 영토
         RegisterBuddhamDbContext<PitakaDbContext>(SchemaTypes.Pitaka);
 
-        // 11. [Bhavana] 스키마 영토
-        RegisterBuddhamDbContext<BhavanaDbContext>(SchemaTypes.Bhavana);
-
-        // 12. [Desana] 스키마 영토
-        RegisterBuddhamDbContext<DesanaDbContext>(SchemaTypes.Desana);
-
-        // 13. [Upaya] 스키마 영토
-        RegisterBuddhamDbContext<PujaDbContext>(SchemaTypes.Puja);
-
-        // 14. [Upaya] 스키마 영토
-        RegisterBuddhamDbContext<UpayaDbContext>(SchemaTypes.Upaya);
-
-
         return services;
 
-        // 🛡️ 징기스칸 전용 멀티 스키마 자동 빌더 함수
         void RegisterBuddhamDbContext<TContext>(string schema) where TContext : DbContext
         {
             services.AddDbContext<TContext>(x =>
