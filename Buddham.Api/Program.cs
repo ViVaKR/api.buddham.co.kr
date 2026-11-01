@@ -1,4 +1,6 @@
 using Buddham.Shared.Extensions;
+using Buddham.Shared.Seeds;
+using Buddham.Shared.Seeds.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,8 +42,13 @@ app.MapControllers();
 
 app.UseCommonHealthChecks();
 
+if (app.Environment.IsDevelopment())
+{
+    await app.SeedGuideASync();
+}
 await app.RunAsync();
 
+// await app.SeedRoleAsync();
 // app.Run();
 // if (app.Environment.IsDevelopment())
 // {
