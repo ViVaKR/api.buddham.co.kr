@@ -1,6 +1,4 @@
 using Buddham.Shared.Extensions;
-using Buddham.Shared.Seeds;
-using Buddham.Shared.Seeds.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,9 +29,6 @@ builder.Services.AddDatabases(builder.Configuration);
 // * 8 Redis
 builder.Services.AddRedisDatabase(builder.Configuration);
 
-// 🌟AI 워커와 소통할 gRPC 클라이언트 팩토리
-// builder.Services.AddGrpcClient<AiEngine.AiEngineClient>(o => { o.Address = new Uri("http://buddham-ai-svc:50051"); });
-
 var app = builder.Build();
 
 app.UseBuddhamMiddlewares();
@@ -42,15 +37,4 @@ app.MapControllers();
 
 app.UseCommonHealthChecks();
 
-if (app.Environment.IsDevelopment())
-{
-    await app.SeedGuideASync();
-}
 await app.RunAsync();
-
-// await app.SeedRoleAsync();
-// app.Run();
-// if (app.Environment.IsDevelopment())
-// {
-//     await app.SeedGuideASync();
-// }

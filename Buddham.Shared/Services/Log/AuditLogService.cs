@@ -7,21 +7,21 @@ using Buddham.Shared.Data;
 
 namespace Buddham.Shared.Services.Log;
 
-public class AuditLogService(LogDbContext logDb, IOllamaService ollamaService): IAuditLogService
+public class AuditLogService(LogDbContext logDb, IOllamaService ollamaService) : IAuditLogService
 {
-     public async Task LogAsync(
-        Guid userId,
-        string userEmail,
-        string actionType,
-        string category,
-        string? message,
-        object? oldValue,
-        object? newValue,
-        string? ipAddress,
-        string? userAgent = null,
-        string? requestPath = null,
-        string? httpMethod = null,
-        bool isSuccess = true)
+    public async Task LogAsync(
+       Guid userId,
+       string userEmail,
+       string actionType,
+       string category,
+       string? message,
+       object? oldValue,
+       object? newValue,
+       string? ipAddress,
+       string? userAgent = null,
+       string? requestPath = null,
+       string? httpMethod = null,
+       bool isSuccess = true)
     {
         var log = new AuditLog
         {
@@ -44,7 +44,6 @@ public class AuditLogService(LogDbContext logDb, IOllamaService ollamaService): 
         try
         {
             var vectorArray = await ollamaService.GetEmbeddingAsync(embeddingSource, CancellationToken.None);
-            // log.Embedding = new Pgvector.Vector(vectorArray);
             log.Embedding = vectorArray;
         }
         catch (Exception ex)
@@ -53,7 +52,7 @@ public class AuditLogService(LogDbContext logDb, IOllamaService ollamaService): 
         }
 
         await logDb.AuditLogs.AddAsync(log);
-        await logDb.SaveChangesAsync(); 
+        await logDb.SaveChangesAsync();
     }
 
     public Task LogFailureAsync(

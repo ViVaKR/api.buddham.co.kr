@@ -214,12 +214,10 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 5. AI & Vector 서비스
+    /// 5. Vector 서비스
     /// </summary>
     public static IServiceCollection AddAiServices(this IServiceCollection services, IConfiguration configuration)
     {
-
-        // ollama embeding
         var ollamaUrl = configuration["Ollama:BaseUrl"]
                         ?? throw new InvalidOperationException("Ollama:BaseUrl 설정이 빠졌습니다!");
 
@@ -235,10 +233,7 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// 6. Business Logic
     /// </summary>
-    public static IServiceCollection AddBusinessService(
-        this IServiceCollection services,
-        IConfiguration configuration,
-        BuddhamProjectMode mode = BuddhamProjectMode.Api) // 👈 기본값은 Api(전체 소환)
+    public static IServiceCollection AddBusinessService(this IServiceCollection services, IConfiguration configuration)
     {
         // 🛡️ 1. [공통 무기] 어떤 기지국이든 필수적으로 쓰는 기초 체력!
         services.AddScoped(typeof(ServiceDependencies<>));
@@ -246,29 +241,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileManagerService, FileManagerService>();
         services.AddScoped(typeof(ValidateFilter<>));
         services.AddValidatorsFromAssemblyContaining<AuthService>();
-
-        switch (mode)
-        {
-            // [Chat]
-            case BuddhamProjectMode.Chat:
-                services.AddScoped<IUserService, UserService>();
-                services.AddScoped<IUserRoleService, UserRoleService>();
-                services.AddScoped<ITokenService, TokenService>();
-                services.AddScoped<IAuditLogService, AuditLogService>();
-                services.AddSingleton<IChatStore, InMemoryChatStore>();
-                return services;
-
-            // [Ai]
-            case BuddhamProjectMode.Ai:
-                services.AddScoped<IUserService, UserService>();
-                services.AddScoped<ITokenService, TokenService>();
-                services.AddScoped<IAuditLogService, AuditLogService>();
-                return services;
-
-            // [Api]
-            case BuddhamProjectMode.Api: break;
-            default: throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
-        }
 
         // 👑 4. [Api 기지국 풀 모드] 메인 서버용 무거운 중화기 군단 총출동!
         // ================== [이메일 연합군] ==================
@@ -289,7 +261,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommentService, CommentService>();
 
         // GuideComment
-        services.AddScoped<GenericCommentService<GuideComment, GuideCommentLike>>(sp => new GenericCommentService<GuideComment, GuideCommentLike>(sp.GetRequiredService<PublicDbContext>()));
+        services.AddScoped(sp => new GenericCommentService<GuideComment, GuideCommentLike>(sp.GetRequiredService<PublicDbContext>()));
 
         // ================== [인증 및 코어 연합군] ==================
         services.AddScoped<IAuthService, AuthService>();
