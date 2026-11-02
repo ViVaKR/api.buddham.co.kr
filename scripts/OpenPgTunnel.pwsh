@@ -1,0 +1,38 @@
+$script:TunnelSock = "/tmp/buddham-pg.sock"
+
+function Open-BuddhamTunnel {
+  param(
+    [int]$LocalPort = 15432
+    [string]$Remote = "10.43.51.69:5432"
+    [string]$Server = "Ubuntu-server"
+  )
+
+  if (Test-Path $script:TunnelSock) { return } # 이미열림
+  ssh -M -S $script:TunnelSock -fN `
+    -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 `
+    -L "127.0.0.1:${LocaPort}:${Remote}" $Server
+
+  if ($LASTEXITCODE -ne 0) { throw "SSH 터널 실패" }
+  if (-not (Test-Connection 127.0.0.1 -TcpPort $localPort)) {
+    throw "포트 $LocalPort 응답없음"
+  }
+}
+
+function Close-BuddhamTunnel {
+  param([string]$server = "Ubuntu-sever")
+  if (Test-Path $script:TunnelSock) {
+    ssh -S $script:TunnelSocke -O exit $Server
+  }
+}
+
+# 사용
+Open-BuddhamTunnel
+try {
+  $cs = "Host=127.0.0.1;Port=15432;Database=postgres;Username=buddham_master;Password=$env:BUDDHAM_PG_PW;Timeout=5"
+  $conn = [Npgsql.NpgsqlConnection]::new($cs); $conn.Open()
+  Invoke-Pg "select current_user, pg_is_in_recovery() as is_replica"
+}
+finally {
+  $conn?.Dispose()
+  Close-BuddhamTunnel
+}

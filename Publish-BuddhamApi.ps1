@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-    구시대적 x86을 배제한 오직 ARM64 시대정신 기반 Buddham API 배포 스크립트
+    ARM64 시대정신 기반 Buddham API 배포 스크립트
 #>
 
 $ErrorActionPreference = "Stop"
 
 $ImageName = "kimbumjun/buddham-api"
 
-$Tag = "v1.1.2"
+$Tag = "v2.0.0"
 
 Write-Host "▶ [1/3] 오직 ARM64 빌드..." -ForegroundColor Cyan
 
@@ -18,7 +18,7 @@ docker buildx build `
   -f Buddham.Api/Dockerfile `
   --push .
 
-Write-Host "✅ Docker Hub Push 완료!" -ForegroundColor Green
+Write-Host "Docker Hub Push 완료!" -ForegroundColor Green
 
 Write-Host "▶ [2/3] Talos K8s 네임스페이스(buddham) 배포 갱신..." -ForegroundColor Cyan
 

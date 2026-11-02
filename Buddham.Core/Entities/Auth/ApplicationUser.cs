@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Buddham.Core.Entities.Auth;
 
-public class ApplicationUser: IdentityUser<Guid>, IAuditable, ISoftDeletable
+public class ApplicationUser : IdentityUser<Guid>, IAuditable, ISoftDeletable
 {
     public required string FullName { get; set; }
     public required string Pseudonym { get; set; } = string.Empty;
@@ -24,5 +24,5 @@ public class ApplicationUser: IdentityUser<Guid>, IAuditable, ISoftDeletable
     public bool IsDeleted => DeletedAt.HasValue;
     public uint RowVersion { get; set; }
     public virtual ICollection<ApplicationUserRole> UserRoles { get; set; } = [];
-    public DateTime? DeletedAt { get; set; } 
+    public DateTime? DeletedAt { get; set; }
 }

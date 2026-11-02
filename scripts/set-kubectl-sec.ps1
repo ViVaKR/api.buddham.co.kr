@@ -1,0 +1,13 @@
+kubectl create secret generic buddham-app-secret -n buddham `
+  --from-literal=JwtConfig__Key='QVXZ5FZDBXatSXmuGKO4gDQfJg3RrzOoygDwyzqzXtCKjCqgeqO9quVlXaNYgLvDQ7oSec5X1hTWGjCCwZxfVswJWvo3ZnK44w0hDfjZcPn8HlfkgPDAu9qOyKNwY4BhNR8TytoiHCJAWA8jIaoR4I4s6kKhGfmC78xTX2o5vECb' `
+  --from-literal=JwtConfig__Issuer='https://api.buddham.co.kr' `
+  --from-literal=JwtConfig__Audience='https://api.buddham.co.kr' `
+  --from-literal=JwtConfig__AccessTokenIn='5' `
+  --from-literal=JwtConfig__RefreshTokenIn='10080' `
+  --from-literal=ConnectionStrings__MongoConnection='mongodb://admin:A9037!m8947#@buddham-mongodb-svc:27017/buddham?authSource=admin' `
+  --from-literal='viva.viva.kr__Password=xecq iecf gzhj thku' `
+  --from-literal='viva.viva.kr__Alias=열반적정' `
+  --from-literal='viv.buddha__Password=vtqu zghs fkaz ejca' `
+  --from-literal='viv.buddha__Alias=붓다핸섬' `
+  --from-literal='biz.burning__Password=rcfz bphc cstr sotx' `
+  --from-literal='biz.burning__Alias=연화'

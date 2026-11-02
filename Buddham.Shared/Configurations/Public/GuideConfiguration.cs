@@ -3,9 +3,6 @@ using Buddham.Shared.Constants;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using NpgsqlTypes;
-using Pgvector;
 
 namespace Buddham.Shared.Configurations.Public;
 
@@ -22,7 +19,6 @@ public class GuideConfiguration : IEntityTypeConfiguration<Guide>, IPublicConfig
         builder.Property(x => x.Content).HasColumnType(PgTypes.Text);
         builder.Property(x => x.UserId).IsRequired().HasColumnType(PgTypes.Uuid);
 
-        // ── tsvector 계산 컬럼 (순혈주의 수호대 2탄 🛡️) ───────────────────────
         // ── 1. Full-Text Search용 tsvector (계산된 컬럼) ──
         builder.Property(x => x.SearchVector)
             .HasColumnType(PgTypes.TsVector)
@@ -31,9 +27,9 @@ public class GuideConfiguration : IEntityTypeConfiguration<Guide>, IPublicConfig
                 "setweight(to_tsvector('simple', coalesce(title, '')), 'A') || " +
                 "setweight(to_tsvector('simple', coalesce(content, '')), 'B')",
                 stored: true)
-            // ✅ 핵심: "이 값은 DB가 Add/Update 시점마다 재계산해"
+            // 핵심: "이 값은 DB가 Add/Update 시점마다 재계산"
             .ValueGeneratedOnAddOrUpdate()
-            // ✅ EF가 이 프로퍼티를 저장 페이로드에서 아예 제외
+            // EF가 이 프로퍼티를 저장 페이로드에서 아예 제외
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 
         // vector
@@ -41,7 +37,7 @@ public class GuideConfiguration : IEntityTypeConfiguration<Guide>, IPublicConfig
             .HasColumnType("vector(1024)")
             .HasConversion(EfConverters.VectorConverter);
 
-        // ── 인덱스 ───────────────────────────────────
+        // ── index ───────────────────────────────────
 
         builder.HasIndex(x => new { x.CreatedAt, x.Id })
             .IsDescending(true, true)

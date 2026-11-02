@@ -127,45 +127,45 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSignalRService(this IServiceCollection services, IWebHostEnvironment env)
-    {
-        // 💬 [실시간 소통 특공대] 우주 최강 SignalR 엔진 빌더 설정
-        services.AddSignalR(options =>
-            {
-                // 1. 🛠️ 에러 메시지 디테일 설정 (개발 환경에서만 친절하게)
-                options.EnableDetailedErrors = env.IsDevelopment();
+    // public static IServiceCollection AddSignalRService(this IServiceCollection services, IWebHostEnvironment env)
+    // {
+    //     // 💬 [실시간 소통 특공대] 우주 최강 SignalR 엔진 빌더 설정
+    //     services.AddSignalR(options =>
+    //         {
+    //             // 1. 🛠️ 에러 메시지 디테일 설정 (개발 환경에서만 친절하게)
+    //             options.EnableDetailedErrors = env.IsDevelopment();
 
-                // 2. ⚡ [핵심] 상태 유지 재연결(Stateful Reconnect) 엔진 가동!
-                // 네트워크가 잠깐 끊겨도 유저당 최대 2,000개의 메시지까지 버퍼에 보관했다가 재연결 시 쏟아부어줌!
-                options.StatefulReconnectBufferSize = 2_000;
+    //             // 2. ⚡ [핵심] 상태 유지 재연결(Stateful Reconnect) 엔진 가동!
+    //             // 네트워크가 잠깐 끊겨도 유저당 최대 2,000개의 메시지까지 버퍼에 보관했다가 재연결 시 쏟아부어줌!
+    //             options.StatefulReconnectBufferSize = 2_000;
 
-                // 3. ⏳ 대규모 접속 및 모바일 환경을 위한 끊김 방지 타임아웃 튜닝
-                // 클라이언트가 무응답으로 버틸 수 있는 한계 시간 (기본 30초 -> 60초)
-                options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    //             // 3. ⏳ 대규모 접속 및 모바일 환경을 위한 끊김 방지 타임아웃 튜닝
+    //             // 클라이언트가 무응답으로 버틸 수 있는 한계 시간 (기본 30초 -> 60초)
+    //             options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
 
-                // 서버가 "너 살아있냐?" 하고 생존 신호(Ping) 날리는 주기 (ClientTimeout의 최소 절반 이하 권장)
-                options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    //             // 서버가 "너 살아있냐?" 하고 생존 신호(Ping) 날리는 주기 (ClientTimeout의 최소 절반 이하 권장)
+    //             options.KeepAliveInterval = TimeSpan.FromSeconds(15);
 
-                // 한 번에 주고받을 수 있는 최대 메시지 크기 (1MB로 넉넉하게 확장)
-                options.MaximumReceiveMessageSize = 1024 * 1024;
-            })
-            // 🟡 A. JSON 프로토콜 최적화 (Angular 기본 및 대중적 통신용)
-            .AddJsonProtocol(options =>
-            {
-                // 순환 참조(무한 루프) 에러 우주 밖으로 차단! (.NET Entity 연동 시 필수)
-                options.PayloadSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-                // 대소문자 구분 없이 유연하게 매핑하도록 설정
-                options.PayloadSerializerOptions.PropertyNameCaseInsensitive = true;
-            })
-            // 📦 B. MessagePack 프로토콜 최적화 (아까 챙긴 우주 초고속 압축 제트 엔진!)
-            .AddMessagePackProtocol(options =>
-            {
-                // MessagePack 직렬화 시 표준 규격 및 순환 참조 방지 옵션 주입 가능 (필요 시 세부 튜닝)
-                options.SerializerOptions = MessagePack.MessagePackSerializerOptions.Standard.WithSecurity(MessagePack.MessagePackSecurity.UntrustedData);
-            });
+    //             // 한 번에 주고받을 수 있는 최대 메시지 크기 (1MB로 넉넉하게 확장)
+    //             options.MaximumReceiveMessageSize = 1024 * 1024;
+    //         })
+    //         // 🟡 A. JSON 프로토콜 최적화 (Angular 기본 및 대중적 통신용)
+    //         .AddJsonProtocol(options =>
+    //         {
+    //             // 순환 참조(무한 루프) 에러 우주 밖으로 차단! (.NET Entity 연동 시 필수)
+    //             options.PayloadSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    //             // 대소문자 구분 없이 유연하게 매핑하도록 설정
+    //             options.PayloadSerializerOptions.PropertyNameCaseInsensitive = true;
+    //         })
+    //         // 📦 B. MessagePack 프로토콜 최적화 (아까 챙긴 우주 초고속 압축 제트 엔진!)
+    //         .AddMessagePackProtocol(options =>
+    //         {
+    //             // MessagePack 직렬화 시 표준 규격 및 순환 참조 방지 옵션 주입 가능 (필요 시 세부 튜닝)
+    //             options.SerializerOptions = MessagePack.MessagePackSerializerOptions.Standard.WithSecurity(MessagePack.MessagePackSecurity.UntrustedData);
+    //         });
 
-        return services;
-    }
+    //     return services;
+    // }
 
     /// <summary>
     /// 2. 컨트롤러

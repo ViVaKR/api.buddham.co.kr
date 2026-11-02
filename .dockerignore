@@ -1,29 +1,67 @@
-﻿**/.dockerignore
-**/.env
+# ============================================================
+# 표준 .dockerignore (.NET API 솔루션 / Talos 배포용)
+# 위치: 솔루션 루트 (= 빌드 컨텍스트 루트)
+#
+# [주의] 아래 파일들은 restore/build 에 필요하므로 절대 제외하지 않습니다.
+#   Directory.Build.props, Directory.Packages.props,
+#   nuget.config, global.json, *.csproj, *.slnx
+# ============================================================
+
+# --- 빌드 산출물 (UseArtifactsOutput 사용 시 artifacts 필수) ---
+**/bin
+**/obj
+**/artifacts
+**/TestResults
+
+# --- 버전 관리 / IDE ---
 **/.git
 **/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
+**/.gitattributes
+**/.dockerignore
 **/.vs
 **/.vscode
 **/.idea
+**/.project
+**/.settings
+**/.toolstarget
+**/*.suo
+**/*.user
 **/*.*proj.user
 **/*.dbmdl
 **/*.jfm
-**/azds.yaml
-**/bin
-**/charts
-**/docker-compose*
+
+# --- Docker / 배포 관련 (이미지에 필요 없음) ---
 **/Dockerfile*
-**/node_modules
-**/npm-debug.log
-**/obj
+**/docker-compose*
+**/azds.yaml
+**/charts
+/k8s/
+**/*.ps1
+
+# --- 비밀 / 환경 설정 ---
+**/.env
+**/.env.*
 **/secrets.dev.yaml
 **/values.dev.yaml
-**/buddham-email-secret.yaml
-**/buddham-postgres-secret.yaml
+**/*secret*.yaml
+**/*secret*.yml
+**/*secrets*.json
+**/appsettings.*.local.json
+**/*.pfx
+**/*.pem
+**/*.key
+
+# --- Talos / Kubernetes 클러스터 설정 ---
+**/talosconfig
+**/controlplane.yaml
+**/worker.yaml
+**/kubeconfig*
+
+# --- 문서 / 기타 ---
 LICENSE
 README.md
 /docs/
 /scripts/
+/backup/
+**/node_modules
+**/npm-debug.log
