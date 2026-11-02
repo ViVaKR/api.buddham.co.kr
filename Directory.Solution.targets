@@ -4,13 +4,16 @@
       Text="⏳ 빌드 시작 시간: $([System.DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss.fff'))" />
   </Target>
 
-  <Target Name="EmitCustomMessage" AfterTargets="Build">
-    <Message Importance="High" Text="The solution has completed the Build target" />
-  </Target>
-
   <Target Name="PostBuildMessage" AfterTargets="Build">
     <Message Importance="High"
       Text="🎉 빌드 완료 시간: $([System.DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss.fff'))" />
   </Target>
-
+  <Target Name="LogGitInfo" BeforeTargets="Build">
+    <!-- Git 명령어로 현재 커밋 hash 가져오기 -->
+    <Exec Command="git rev-parse --short HEAD" StandardOutputImportance="Low"
+      ConsoleToMSBuild="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitHash" />
+    </Exec>
+    <Message Importance="High" Text="📦 현재 Git Commit: $(GitCommitHash)" />
+  </Target>
 </Project>
