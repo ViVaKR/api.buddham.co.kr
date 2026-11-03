@@ -283,7 +283,7 @@ public class GuideService(
         CancellationToken ct
     )
     {
-        var keyword = query.Keyword.Trim();
+        var keyword = query.Keyword?.Trim();
         var currentOffset = 0;
         // ── 커서에서 Offset 복원 ──────────────────────────────────────────────
         // 두 번째 페이지 이후 요청이라면 커서에서 offset과 keyword를 꺼냄
@@ -296,7 +296,7 @@ public class GuideService(
         }
 
         // ── 1단계: 키워드 → 임베딩 벡터 변환 ────────────────────────────────
-        var embeddingArray = await ollamaService.GetEmbeddingAsync(keyword, ct);
+        var embeddingArray = await ollamaService.GetEmbeddingAsync(keyword!, ct);
         var queryVector = new Pgvector.Vector(embeddingArray);
         // ── 2단계: 전체 카운트 (첫 페이지 진입 시에만) ───────────────────────
         var totalCount = 0;
@@ -327,7 +327,13 @@ public class GuideService(
 
         // ── 4단계: 다음 페이지 판정 ──────────────────────────────────────────
         var hasMore = rawItems.Count > query.Size;
-        var pageItems = rawItems.Skip(query.Size).AsQueryable();
+
+        // 🔴 버그 지점: 현재 페이지에 보여줄 데이터(0부터 Size만큼)를 가져와야 하는데,
+        // 오히려 현재 페이지 데이터를 건너뛰고(Skip) 다음 페이지 판정용 데이터(+1)만 남겼음.
+        // var pageItems = rawItems.Skip(query.Size).AsQueryable();
+
+        // 🟢 수정 방향: Take(query.Size)를 하거나, rawItems의 앞에서부터 Size만큼 잘라야함.
+        var pageItems = rawItems.Take(query.Size).AsQueryable();
         var mappedResponses = pageItems.AsSummary().ToList();
         // ── 5단계: 다음 커서 발행 ────────────────────────────────────────────
         string? nextCursor = null;

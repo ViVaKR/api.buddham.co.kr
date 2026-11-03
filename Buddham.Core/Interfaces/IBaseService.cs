@@ -14,24 +14,6 @@ public interface IBaseService<TId, TRequest, TResponse> where TId : IEquatable<T
     /// </summary>
     Task<Result<IEnumerable<TResponse>>> GetAsync();
 
-    /// <summary>
-    /// 커서 목록조회
-    /// (키워드 없음: CreateAt + Id 커서 / 키워드 있음: TsVector 전문검색)
-    /// </summary>
-    // Task<CursorPagedResult<TResponse>> GetCursorListAsync(CursorPagedQuery query, CancellationToken ct);
-
-    /// <summary>
-    /// 오프셋 페이지 목록 조회
-    /// </summary>
-    // Task<OffsetPagedResult<TResponse>> GetOffsetListAsync(OffsetPagedQuery query, CancellationToken ct);
-
-    /// <summary>
-    /// 의미론적 유사도 기반 커서 목록 조회 (pgvector / bge-m3)
-    /// 글자가 달라도 뜻이 비슷한 문서를 코사인 유사도로 탐색
-    /// </summary>
-    // Task<CursorPagedResult<TResponse>> GetSemanticListAsync(SemanticSearchQuery query, CancellationToken ct);
-
-
     // ══════════════════════════════════════════
     // ✏️ CRUD
     // ══════════════════════════════════════════

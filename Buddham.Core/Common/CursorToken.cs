@@ -75,10 +75,10 @@ public static class CursorToken
     }
 
     /// <summary>
-    /// Create 
+    /// Create
     /// 백터 검색용 : Offset 기반 커서
     /// </summary>
-    public static string CreateVectorToken(int offset, string keyword)
+    public static string CreateVectorToken(int offset, string? keyword)
     {
         var raw = $"v:{offset}:{keyword}";
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(raw));

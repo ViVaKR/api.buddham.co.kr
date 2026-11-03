@@ -11,6 +11,6 @@ public class SemanticSearchQuery
         set => field = Math.Clamp(value, 1, MaxSize);
     } = 20;
 
-    public required string Keyword { get; set; }
+    public string? Keyword { get; set; }
     public float Threshold { get; set; } = 0.7f;
 }
