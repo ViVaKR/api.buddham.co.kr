@@ -1,12 +1,13 @@
 using Buddham.Core.Common.Primitives;
 using Buddham.Core.EnumTypes;
+using Buddham.Core.Interfaces.Scripture;
 
 namespace Buddham.Core.Entities.Scriptures;
 
 /// <summary>
 /// 집성, 팔리의 Nikaya, 한역의 Agama 가 같은 층위 (Kind로 구분)
 /// </summary>
-public class CanonCollection : EntityBase
+public class CanonCollection : EntityBase, ICodedName
 {
     public long DivisionId { get; set; }
     public CanonDivision Division { get; set; } = null!;

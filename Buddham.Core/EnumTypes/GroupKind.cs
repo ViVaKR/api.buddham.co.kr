@@ -1,6 +1,11 @@
 namespace Buddham.Core.EnumTypes;
 
-public class GroupKind
+public enum GroupKind
 {
+    Vagga,
+    Samyutta,
+    Nipata,
+    Chapter,
+    Fascicle,   // 卷
+    Other
 }
-

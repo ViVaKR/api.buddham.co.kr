@@ -1,5 +1,5 @@
 using Buddham.Core.Common.Primitives;
-using Buddham.Core.Interfaces.Public;
+using Buddham.Core.Interfaces.Scripture;
 
 namespace Buddham.Core.Entities.Scriptures;
 

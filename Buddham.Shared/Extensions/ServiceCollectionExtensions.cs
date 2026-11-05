@@ -298,8 +298,8 @@ public static class ServiceCollectionExtensions
         // 3. [Auth] 스키마 영토 (🚨 복붙 탈출 완료!)
         RegisterBuddhamDbContext<BuddhamDbContext>(SchemaTypes.Auth);
 
-        // 4. [Canon] 스키마 영토 (🚨 복붙 탈출 완료!)
-        RegisterBuddhamDbContext<CanonDbContext>(SchemaTypes.Canon);
+        // 4. [Scripture] 스키마 영토
+        RegisterBuddhamDbContext<ScriptureDbContext>(SchemaTypes.Scripture);
 
         // 6. [Comment] 스키마 영토
         RegisterBuddhamDbContext<CommentDbContext>(SchemaTypes.Comment);
@@ -309,9 +309,6 @@ public static class ServiceCollectionExtensions
 
         // 9. [Public] 스키마 영토
         RegisterBuddhamDbContext<PublicDbContext>(SchemaTypes.Public);
-
-        // 10. [Pitaka] 스키마 영토
-        RegisterBuddhamDbContext<PitakaDbContext>(SchemaTypes.Pitaka);
 
         return services;
 
@@ -349,31 +346,5 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(connectionMultiplexer);
         services.AddSingleton<IRedisCacheService, RedisCacheService>();
         return services;
-    }
-}
-
-/// <summary>
-/// VivaKR.Chat (Nuget)
-/// </summary>
-public class InMemoryChatStore : IChatStore
-{
-    private readonly ConcurrentQueue<ChatMessage> _messages = new();
-
-    public Task SaveAsync(ChatMessage message, CancellationToken ct = default)
-    {
-        _messages.Enqueue(message);
-        return Task.CompletedTask;
-    }
-
-    public Task<IReadOnlyList<ChatMessage>> GetRecentAsync(string siteId, string room, int take, CancellationToken ct = default)
-    {
-
-        IReadOnlyList<ChatMessage> result = [.. _messages
-            .Where(m => m.SiteId == siteId && m.Room == room)
-            .OrderByDescending(m => m.SentAt)
-            .Take(take)
-            .OrderBy(m => m.SentAt)];
-
-        return Task.FromResult(result);
     }
 }

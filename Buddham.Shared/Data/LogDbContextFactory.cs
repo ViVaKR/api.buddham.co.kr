@@ -1,9 +1,7 @@
 using Buddham.Shared.Constants;
 using Buddham.Shared.Extensions;
-using EFCore.NamingConventions.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.Extensions.Configuration;
 
 namespace Buddham.Shared.Data;
 

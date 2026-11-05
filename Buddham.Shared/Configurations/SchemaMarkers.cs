@@ -18,5 +18,8 @@ public interface IPitakaConfiguration { }
 /// <summary> Public 스키마 (Ollama) </summary>
 public interface IPublicConfiguration { }
 
+/// <summary> Scripture 스키마 </summary>
+public interface IScriptureConfiguration { }
+
 /// <summary> Log 스키마 (접속 로그, 변경 이력 등) </summary>
 public interface ILogConfiguration { }

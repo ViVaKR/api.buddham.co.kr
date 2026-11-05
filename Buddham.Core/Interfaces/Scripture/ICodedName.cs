@@ -1,4 +1,4 @@
-namespace Buddham.Core.Interfaces.Public;
+namespace Buddham.Core.Interfaces.Scripture;
 
 /// <summary>
 /// 코드 + 이름 3종(한글•원어•로마자)을 공유한는 엔터티
