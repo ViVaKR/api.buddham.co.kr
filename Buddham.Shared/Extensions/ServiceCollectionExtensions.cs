@@ -277,8 +277,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IVideoJobQueue, VideoJobQueue>();
         services.AddHostedService<VideoProcessingWorker>();
 
-        // ====
-        services.AddScoped<IAppleSyscallService, AppleSyscallService>();
         services.AddScoped<IGuideService, GuideService>();
 
         return services;
