@@ -6,4 +6,5 @@ public interface IGuideService : IBaseService<long, GuideSchema.Request, GuideSc
     IDetailQueryableService<long, GuideSchema.Response>,
     ICursorQueryable<GuideSchema.Response>,
     IOffsetQueryable<GuideSchema.Response>,
-    ISemanticQueryable<GuideSchema.Response> { }
+    ISemanticQueryable<GuideSchema.Response>
+{ }
