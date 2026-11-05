@@ -1,14 +1,12 @@
 using Buddham.Core.EnumTypes;
 
-namespace Buddham.Shared.Extensions.Tangwha;
+namespace Buddham.Shared.Extensions;
 
 public static class BuddhistCategoryExtensions
 {
     /// <summary>
     /// 사용법: buddhistCategory.ToKorean();
     /// </summary>
-    /// <param name="category"></param>
-    /// <returns></returns>
     public static string ToKorean(this BuddhistCategory category) => category switch
     {
         BuddhistCategory.Bulbosal => "불보살",

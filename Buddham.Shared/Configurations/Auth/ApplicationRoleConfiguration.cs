@@ -13,8 +13,7 @@ public class ApplicationRoleConfiguration
     {
         builder.ToTable(TableNames.Roles, SchemaTypes.Auth);
 
-        builder.Property(x => x.Id).HasColumnName(ColumnNames.Id).HasColumnType(PgTypes.Uuid)
-            .HasValueGenerator<SequentialGuidValueGenerator>();
+        builder.Property(x => x.Id).HasColumnType(PgTypes.Uuid).HasValueGenerator<SequentialGuidValueGenerator>();
 
         builder.Property(x => x.KoName).HasMaxLength(256).HasColumnType(PgTypes.Text).IsRequired(false);
         builder.Property(x => x.Description).HasColumnType(PgTypes.Text).IsRequired(false);

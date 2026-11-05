@@ -141,6 +141,7 @@ public class GuideService(
     public async Task<Result> CreateAsync(GuideSchema.Request request, CancellationToken ct)
     {
         var user = await userManager.FindByNameAsync(ClaimTypes.NameIdentifier);
+
         if (user is null) return Result.Forbidden();
 
         // ── 1. 입력값 검증 ────────────────────────────────────────

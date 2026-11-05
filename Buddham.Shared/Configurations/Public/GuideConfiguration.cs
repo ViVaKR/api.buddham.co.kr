@@ -19,7 +19,7 @@ public class GuideConfiguration : IEntityTypeConfiguration<Guide>, IPublicConfig
         builder.Property(x => x.Content).HasColumnType(PgTypes.Text);
         builder.Property(x => x.UserId).IsRequired().HasColumnType(PgTypes.Uuid);
 
-        // ── 1. Full-Text Search용 tsvector (계산된 컬럼) ──
+        // ── Full-Text Search용 tsvector (계산된 컬럼) ──
         builder.Property(x => x.SearchVector)
             .HasColumnType(PgTypes.TsVector)
             .HasConversion(EfConverters.TsVectorConverter) // 읽기 방향만 진짜로 의미 있음
@@ -45,12 +45,12 @@ public class GuideConfiguration : IEntityTypeConfiguration<Guide>, IPublicConfig
 
         // GIN
         builder.HasIndex(x => x.SearchVector)
-            .HasMethod("GIN")
+            .HasMethod(PgMethods.GIN)
             .HasDatabaseName("ix_guides_search_vector");
 
         // HNSW 인덱스: 벡터 유사도 검색용 (코사인 유사도)
         builder.HasIndex(x => x.Embedding)
-            .HasMethod("hnsw")
+            .HasMethod(PgMethods.HNSW)
             .HasOperators("vector_cosine_ops")
             .HasDatabaseName("ix_guides_embedding");
 

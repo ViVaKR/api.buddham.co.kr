@@ -1,5 +1,4 @@
 using System.Reflection;
-using Buddham.Core.Entities.Comment;
 using Buddham.Shared.Configurations;
 using Buddham.Shared.Constants;
 using Buddham.Shared.Extensions;
@@ -10,9 +9,6 @@ namespace Buddham.Shared.Data;
 public class CommentDbContext(DbContextOptions<CommentDbContext> options)
     : DbContext(options)
 {
-    // public DbSet<GuideComment> GuideComments => Set<GuideComment>();
-    // public DbSet<GuideCommentLike> GuideCommentLikes => Set<GuideCommentLike>();
-
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

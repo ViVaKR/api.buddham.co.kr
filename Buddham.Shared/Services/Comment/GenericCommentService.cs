@@ -7,9 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Buddham.Shared.Services.Comment;
 
-public class GenericCommentService<TComment, TReaction>(
-    DbContext context
-) : ICommentBridge
+public class GenericCommentService<TComment, TReaction>(DbContext context) : ICommentBridge
     where TComment : CommentBase, ICommentTarget, new()
     where TReaction : ReactionBase, new()
 {
@@ -87,7 +85,7 @@ public class GenericCommentService<TComment, TReaction>(
                          ?? throw new KeyNotFoundException("부모 댓글이 존재하지 않습니다.");
 
             comment.RootId = parent.RootId ?? parent.Id;
-            // ✅ 이제 문자열 "ScriptureId" 없이도 안전하게 복사 가능!
+            // ✅ 이제 문자열 "...Id" 없이도 안전하게 복사 가능!
             // 어떤 댓글 타입이 오더라도 TargetId를 통해 소속 ID를 상속받습니다.
             // ★ [핵심 보완] 부모의 TargetId를 상속받되,
             // 만약 프론트에서 dto로 TargetId(GuideId)를 직접 넘겨줬다면 그것을 우선 적용!
@@ -95,7 +93,6 @@ public class GenericCommentService<TComment, TReaction>(
             {
                 comment.TargetId = parent.TargetId;
             }
-            // comment.TargetId = parent.TargetId;
             comment.MentionedUserName = parent.Pseudonym;
         }
         else

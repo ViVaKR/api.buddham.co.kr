@@ -13,7 +13,7 @@ public class FileDataConfiguration : IEntityTypeConfiguration<FileData>, IPublic
 
         builder.HasKey(x => x.Id);
 
-        builder.Property(x => x.Id).HasColumnName(ColumnNames.Id).HasColumnType(PgTypes.BigInt).ValueGeneratedOnAdd();
+        builder.Property(x => x.Id).HasColumnType(PgTypes.BigInt).ValueGeneratedOnAdd();
 
         builder.Property(x => x.UserId).IsRequired().HasColumnName("user_id").HasColumnType(PgTypes.Uuid);
         builder.Property(x => x.StoredFileName).IsRequired().HasColumnName("stored_file_name");

@@ -1,5 +1,6 @@
 using Buddham.Core.Common.Primitives;
 using Buddham.Core.EnumTypes;
+
 namespace Buddham.Core.Entities.Public;
 
 public class Tangwha : EntityBase
@@ -15,4 +16,7 @@ public class Tangwha : EntityBase
     public string? Description { get; set; }
     public string? ThumbnailUrl { get; set; }
     public string? ImageUrl { get; set; }
+    public Guid UserId { get; set; }
+    public float[]? Embedding { get; set; }
+    public string? SearchVector { get; set; }
 }

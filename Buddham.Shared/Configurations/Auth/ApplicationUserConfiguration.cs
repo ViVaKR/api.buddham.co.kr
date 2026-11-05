@@ -17,7 +17,6 @@ public class ApplicationUserConfiguration
         builder.Ignore(x => x.PhoneNumberConfirmed);
 
         builder.Property(x => x.Id)
-            .HasColumnName(ColumnNames.Id)
             .HasColumnType(PgTypes.Uuid)
             .HasValueGenerator<SequentialGuidValueGenerator>();
 

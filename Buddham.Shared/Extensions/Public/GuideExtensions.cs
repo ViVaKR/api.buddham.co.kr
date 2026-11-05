@@ -1,6 +1,5 @@
 using Buddham.Core.Entities.Public;
 using Buddham.Core.Schemas;
-using Pgvector;
 
 namespace Buddham.Shared.Extensions.Public;
 

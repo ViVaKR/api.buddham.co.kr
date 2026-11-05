@@ -4,5 +4,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseArtifactsOutput>true</UseArtifactsOutput>
+    <NoWarn>$(NoWarn);CS9113</NoWarn>
   </PropertyGroup>
 </Project>
