@@ -5,10 +5,10 @@ namespace Buddham.Core.Interfaces.Cache;
 public interface IRedisCacheService
 {
     Task<CacheResult<T>> GetOrSetCacheAsync<T>(
-        string key, 
+        string key,
         Func<Task<T>> factory,
         TimeSpan? expiration = null);
 
     Task RemoveAsync(string key);
-    Task RemoveByPrefixAsync(string prefix); 
+    Task RemoveByPrefixAsync(string prefix);
 }

@@ -16,6 +16,13 @@ public static class AppInfrastructure
     public const int EmbeddingDimensions = 1024;
     public const int EmbeddingContentChars = 500;
     public const int MaxTitleLength = 500;
+    public const int MaxContentLength = 100_000;
     public const int MaxKeywordLength = 200;
     public const int MaxPageSize = 100;
+    public const int MaxOffsetDepth = 10_000;
+
+    // 벡터 검색은 Offset 에뮬레이션이라 깊은 페이지일수록 비싸다. 상한을 둔다.
+    public const int MaxSemanticOffset = 1_000;
+
+    public const string CacheKey_Embed = "embed";
 }

@@ -9,23 +9,13 @@ namespace Buddham.Shared.Extensions.Persistence;
 /// 커서 페이징 옵션.
 /// Keyword 는 서비스에서 정규화(Trim)한 값을 넘기는 것을 권장한다 (여기서도 한 번 더 Trim 한다).
 /// </summary>
-public sealed record CursorSliceOptions(
-    string? Cursor,
-    int Size,
-    int MaxSize,
-    string? Keyword,
-    bool Descending,
-    bool IncludeTotal = true);
+public sealed record CursorSliceOptions(string? Cursor, int Size, int MaxSize, string? Keyword, bool Descending, bool IncludeTotal = true);
 
 /// <summary>
 /// 커서 페이징 결과(전송용 Result 로 감싸기 전의 순수 데이터).
 /// TotalCount 는 첫 페이지에서만 계산되며, 계산하지 않았으면 null.
 /// </summary>
-public sealed record CursorSlice<T>(
-    List<T> Items,
-    string? NextCursor,
-    bool HasMore,
-    int? TotalCount);
+public sealed record CursorSlice<T>(List<T> Items, string? NextCursor, bool HasMore, int? TotalCount);
 
 public static class QueryableCursorExtensions
 {

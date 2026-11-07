@@ -9,6 +9,7 @@ using Buddham.Core.Interfaces.Log;
 using Buddham.Core.Interfaces.Ollama;
 using Buddham.Core.Interfaces.Public;
 using Buddham.Core.Interfaces.Tangwha;
+using Buddham.Shared.Caching;
 using Buddham.Shared.Constants;
 using Buddham.Shared.Data;
 using Buddham.Shared.Filters;
@@ -18,6 +19,7 @@ using Buddham.Shared.Services.Auth;
 using Buddham.Shared.Services.Cache;
 using Buddham.Shared.Services.Comment;
 using Buddham.Shared.Services.Common;
+using Buddham.Shared.Services.Crud;
 using Buddham.Shared.Services.Log;
 using Buddham.Shared.Services.OllamaService;
 using Buddham.Shared.Services.Public;
@@ -198,6 +200,7 @@ public static class ServiceCollectionExtensions
     {
         // 🛡️ 1. [공통 무기] 어떤 기지국이든 필수적으로 쓰는 기초 체력!
         services.AddScoped(typeof(ServiceDependencies<>));
+        services.AddScoped<CrudDependencies>();
         services.AddScoped<IFileValidationService, FileValidationService>();
         services.AddScoped<IFileManagerService, FileManagerService>();
         services.AddScoped(typeof(ValidateFilter<>));
@@ -298,6 +301,46 @@ public static class ServiceCollectionExtensions
         }
     }
 
+
+    // public static IServiceCollection AddRedisDatabase(this IServiceCollection services, IConfiguration configuration)
+    // {
+    //     // * Redis
+    //     var redisConn = configuration.GetConnectionString(AppInfrastructure.RedisConnection) ??
+    //                     throw new Exception("Redis connection string is missing!");
+
+    //     // 1. 키접두사: 같은 Redis 를 다른 용도로 나눠 쓸 때 충돌 방지
+    //     // 분산 캐시 시스템(IDistributedCache) 활성화
+    //     services.AddStackExchangeRedisCache(options =>
+    //     {
+    //         options.Configuration = redisConn;
+    //         options.InstanceName = "Buddham";
+    //     });
+
+    //     // 2. 🌟 인터페이스와 구현체 모두를 커버하는 초강력 싱글톤 주입법!
+    //     var connectionMultiplexer = ConnectionMultiplexer.Connect(redisConn);
+    //     services.AddSingleton<IConnectionMultiplexer>(connectionMultiplexer);
+
+    //     // 위에서 만든 멀티 플레서를 IDistributedCache 가 재사용하도록 연결
+    //     services.AddOptions<RedisCacheOptions>()
+    //         .Configure<IConnectionMultiplexer>((options, mux) => options.ConnectionMultiplexerFactory = () => Task.FromResult(mux));
+
+    //     // HybridCache 는 등록된 IDistribuedCache(Redis) 를 자동으로 L2 로 사용한다.
+    //     services.AddHybridCache(options =>
+    //     {
+    //         // 기본 1MB 를 넘는 항목은 캐시되지 않는다. 목록 응답(본문 포함)을 고려해 상향.
+    //         options.MaximumPayloadBytes = 4 * 1024 * 1024;
+    //         options.DefaultEntryOptions = new HybridCacheEntryOptions
+    //         {
+    //             Expiration = TimeSpan.FromMinutes(5),
+    //             LocalCacheExpiration = TimeSpan.FromSeconds(30)
+    //         };
+    //     });
+
+    //     services.AddSingleton(connectionMultiplexer);
+    //     services.AddSingleton<IRedisCacheService, RedisCacheService>();
+    //     return services;
+    // }
+
     /// <summary>
     /// 8. Redis
     /// Redis 연결 1개를 모두가 공유한다.
@@ -333,6 +376,8 @@ public static class ServiceCollectionExtensions
                 LocalCacheExpiration = TimeSpan.FromSeconds(30)
             };
         });
+        // 엔티티 단위 캐시 표준화(접두사/태그/TTL). HybridCache 위에서 동작한다.
+        services.AddSingleton<IEntityCacheFactory, EntityCacheFactory>();
 
         services.AddSingleton<IRedisCacheService, RedisCacheService>();
         return services;

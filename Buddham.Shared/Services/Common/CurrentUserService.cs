@@ -7,7 +7,8 @@ namespace Buddham.Shared.Services.Common;
 
 public class CurrentUserService(IHttpContextAccessor httpContextAccessor) : ICurrentUserService
 {
-    private readonly ClaimsPrincipal? User = httpContextAccessor.HttpContext?.User;
+    // private readonly ClaimsPrincipal? User = httpContextAccessor.HttpContext?.User;
+    private ClaimsPrincipal? User => httpContextAccessor.HttpContext?.User;
 
     public Guid? UserId
     {
@@ -19,7 +20,7 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor) : ICur
         }
     }
 
-    public bool IsAuthenticatied => User?.Identity?.IsAuthenticated == true;
+    public bool IsAuthenticated => User?.Identity?.IsAuthenticated == true;
 
     public bool IsAdmin =>
         User?.IsInRole(UserRoles.Admin) == true ||

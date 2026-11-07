@@ -1,12 +1,18 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Buddham.Core.Common.Options;
 using Buddham.Core.Common.Results;
 using Buddham.Core.Interfaces.Cache;
+using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace Buddham.Shared.Services.Cache;
 
-public class RedisCacheService(IConnectionMultiplexer redis) : IRedisCacheService
+public class RedisCacheService(
+    IConnectionMultiplexer redis,
+    ILogger<RedisCacheService> logger) : IRedisCacheService
 {
     private readonly IDatabase db = redis.GetDatabase();
 
@@ -32,7 +38,7 @@ public class RedisCacheService(IConnectionMultiplexer redis) : IRedisCacheServic
         var newData = await factory();
 
         if (newData == null) return new CacheResult<T>(newData, DateTime.UtcNow, false);
-        // 비동기적 직렬화 저장
+
         var serialized = JsonSerializer.Serialize(newData, AppJsonOptions.Default);
         await db.StringSetAsync(key, serialized, expiration ?? TimeSpan.FromHours(1));
 

@@ -1,10 +1,11 @@
 using Buddham.Core.EnumTypes;
+using Buddham.Core.Interfaces.Common;
 
 namespace Buddham.Core.Schemas;
 
 public static class GuideSchema
 {
-    public record Response
+    public record Response : ICursorKeyed
     {
         public long Id { get; set; }
         public required GuideCategory GuideCategory { get; set; }
