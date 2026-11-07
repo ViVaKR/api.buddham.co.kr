@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Buddham.Core.Common;
 using Buddham.Core.Common.Queries;
 using Buddham.Core.Common.Results;
@@ -11,6 +14,7 @@ using Buddham.Shared.Extensions.Persistence;
 using Buddham.Shared.Extensions.Public;
 using Buddham.Shared.Middlewares;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Pgvector.EntityFrameworkCore;
 
@@ -21,6 +25,7 @@ public class GuideService(
     ICurrentUserService currentUser,
     IEntityAuthorizationService authorization,
     IEmbeddingService embeddingService,
+    HybridCache cache,
     TimeProvider timeProvider,
     ILogger<GuideService> logger
 ) : IGuideService
@@ -34,6 +39,33 @@ public class GuideService(
     private const int MaxSemanticOffset = 1_000;
 
     // ══════════════════════════════════════════════════════════
+    // 캐시 설정
+    // ══════════════════════════════════════════════════════════
+
+    // 응답 모양(Response)이 바뀌어 배포할 때 이전 직렬화 데이터를 읽지 않도록 버전을 올린다.
+    private const string CachePrefix = "guide:v1";
+
+    // 가이드 데이터가 바뀌면 이 태그 하나로 목록/상세 캐시를 한 번에 무효화한다.
+    private const string GuideTag = "guides";
+    private static readonly string[] GuideTags = [GuideTag];
+
+    // L2(Redis) 5분 / L1(파드 메모리) 30초.
+    // HybridCache 의 L1 은 파드별이라 다른 파드의 L1 은 즉시 무효화되지 않는다.
+    // 따라서 L1 TTL 이 곧 "다른 파드에서 보일 수 있는 최대 지연"이다.
+    private static readonly HybridCacheEntryOptions DataCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromMinutes(5),
+        LocalCacheExpiration = TimeSpan.FromSeconds(30)
+    };
+
+    // 검색어 임베딩은 가이드 데이터와 무관하므로 태그 없이 길게, Redis 에만 저장한다.
+    private static readonly HybridCacheEntryOptions EmbeddingCacheOptions = new()
+    {
+        Expiration = TimeSpan.FromHours(24),
+        Flags = HybridCacheEntryFlags.DisableLocalCache
+    };
+
+    // ══════════════════════════════════════════════════════════
     // 공통 헬퍼
     // ══════════════════════════════════════════════════════════
 
@@ -45,6 +77,41 @@ public class GuideService(
 
     private DateTime UtcNow => timeProvider.GetUtcNow().UtcDateTime;
 
+    /// <summary>
+    /// 캐시 키: 파라미터를 해시해 길이/특수문자 문제를 없앤다 (파드 간 결정적).
+    /// </summary>
+    private static string CacheKey(string kind, params object?[] parts)
+    {
+        var raw = string.Join('\u001F',
+            parts.Select(p => Convert.ToString(p, CultureInfo.InvariantCulture) ?? string.Empty));
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+        return $"{CachePrefix}:{kind}:{hash}";
+    }
+
+    /// <summary>
+    /// Read-through 캐시. 같은 키의 동시 미스는 한 번만 DB 로 간다(스탬피드 방지).
+    /// 팩토리에서 던진 예외는 캐시되지 않는다.
+    /// </summary>
+    private ValueTask<T> CachedAsync<T>(
+        string key, Func<CancellationToken, ValueTask<T>> factory, CancellationToken ct)
+        => cache.GetOrCreateAsync(key, factory, DataCacheOptions, GuideTags, ct);
+
+    /// <summary>
+    /// 쓰기 성공 후 호출. DB 는 이미 커밋됐으므로 요청이 취소돼도 무효화는 수행하고(CancellationToken.None),
+    /// 캐시 장애가 쓰기 결과를 실패로 만들지 않도록 예외는 삼킨다(TTL 이 최후의 안전망).
+    /// </summary>
+    private async Task InvalidateCacheAsync()
+    {
+        try
+        {
+            await cache.RemoveByTagAsync(GuideTag, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "{Entity} cache invalidation failed. TTL 만료까지 이전 데이터가 보일 수 있습니다.", EntityName);
+        }
+    }
+
     // ══════════════════════════════════════════════════════════
     // 조회
     // ══════════════════════════════════════════════════════════
@@ -54,12 +121,15 @@ public class GuideService(
     /// </summary>
     public async Task<Result<IEnumerable<GuideSchema.Response>>> GetAsync(CancellationToken ct)
     {
-        var data = await ActiveGuides.AsNoTracking()
-            .OrderByDescending(x => x.CreatedAt)
-            .ThenByDescending(x => x.Id)
-            .Take(AppInfrastructure.MaxPageSize)
-            .AsSummary()
-            .ToListAsync(ct);
+        var data = await CachedAsync(
+            CacheKey("all"),
+            async token => await ActiveGuides.AsNoTracking()
+                .OrderByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.Id)
+                .Take(AppInfrastructure.MaxPageSize)
+                .AsSummary()
+                .ToListAsync(token),
+            ct);
 
         return Result<IEnumerable<GuideSchema.Response>>.Success(data, null, "전체목록 반환 성공");
     }
@@ -71,6 +141,7 @@ public class GuideService(
     public async Task<OffsetPagedResult<GuideSchema.Response>> GetOffsetListAsync(
         OffsetPagedQuery query, CancellationToken ct)
     {
+        // 검증은 캐시 앞에서: 잘못된 요청이 캐시 키를 만들지 않게 한다.
         if (query.PageNumber < 1)
             throw new BuddhamException(RsCode.BadRequest, "페이지 번호는 1 이상이어야 합니다.");
 
@@ -78,16 +149,27 @@ public class GuideService(
             throw new BuddhamException(RsCode.BadRequest,
                 $"페이지 크기는 1~{AppInfrastructure.MaxPageSize} 사이여야 합니다.");
 
-        var baseQuery = ApplyKeyword(ActiveGuides.AsNoTracking(), NormalizeKeyword(query.SearchKeyword));
-        var totalCount = await baseQuery.CountAsync(ct);
+        var keyword = NormalizeKeyword(query.SearchKeyword);
+        var sortBy = query.SortBy?.Trim().ToLowerInvariant();
 
-        var data = await ApplySort(baseQuery, query.SortBy, query.Descending)
-            .ApplyOffset(query.PageNumber, query.PageSize)
-            .AsSummary()
-            .ToListAsync(ct);
+        var slice = await CachedAsync(
+            CacheKey("offset", keyword, sortBy, query.Descending, query.PageNumber, query.PageSize),
+            async token =>
+            {
+                var baseQuery = ApplyKeyword(ActiveGuides.AsNoTracking(), keyword);
+                var totalCount = await baseQuery.CountAsync(token);
+
+                var data = await ApplySort(baseQuery, sortBy, query.Descending)
+                    .ApplyOffset(query.PageNumber, query.PageSize)
+                    .AsSummary()
+                    .ToListAsync(token);
+
+                return new OffsetSlice(data, totalCount);
+            },
+            ct);
 
         return OffsetPagedResult<GuideSchema.Response>.Success(
-            data, totalCount, query.PageNumber, query.PageSize, "오프셋 페이지 목록 전송완료");
+            slice.Items, slice.TotalCount, query.PageNumber, query.PageSize, "오프셋 페이지 목록 전송완료");
     }
 
     public Task<CursorPagedResult<GuideSchema.Response>> GetSemanticListAsync(
@@ -100,18 +182,24 @@ public class GuideService(
 
     public async Task<Result<GuideSchema.Response>> GetByIdAsync(long id, CancellationToken ct)
     {
-        var data = await ActiveGuides.AsNoTracking()
-            .Where(x => x.Id == id)
-            .AsSummary()
-            .FirstOrDefaultAsync(ct);
+        // 없는 Id 도 캐시한다(Create 시 태그 무효화로 정리되므로 안전).
+        // HybridCache 에 null 을 직접 맡기지 않도록 래퍼에 담는다.
+        var cached = await CachedAsync(
+            CacheKey("detail", id),
+            async token => new Cached<GuideSchema.Response>(
+                await ActiveGuides.AsNoTracking()
+                    .Where(x => x.Id == id)
+                    .AsSummary()
+                    .FirstOrDefaultAsync(token)),
+            ct);
 
-        return data is null
+        return cached.Value is null
             ? Result<GuideSchema.Response>.NotFound()
-            : Result<GuideSchema.Response>.Success(data, null, "OK");
+            : Result<GuideSchema.Response>.Success(cached.Value, null, "OK");
     }
 
     // ══════════════════════════════════════════════════════════
-    // 생성 / 수정 / 삭제
+    // 생성 / 수정 / 삭제  (성공 시에만 캐시 무효화)
     // ══════════════════════════════════════════════════════════
 
     public async Task<Result> CreateAsync(GuideSchema.Request request, CancellationToken ct)
@@ -128,7 +216,12 @@ public class GuideService(
         entity.Embedding = vector;
 
         context.Guides.Add(entity);
-        return await context.TrySaveChangeAsync(logger, EntityName, ct) ?? Result.Created();
+
+        var saveFailure = await context.TrySaveChangeAsync(logger, EntityName, ct);
+        if (saveFailure is not null) return saveFailure;
+
+        await InvalidateCacheAsync();
+        return Result.Created();
     }
 
     public async Task<Result> UpdateAsync(long id, GuideSchema.Request request, CancellationToken ct)
@@ -152,7 +245,12 @@ public class GuideService(
         }
 
         entity.ApplyUpdate(request, UtcNow, newEmbedding);
-        return await context.TrySaveChangeAsync(logger, EntityName, ct) ?? Result.Updated();
+
+        var saveFailure = await context.TrySaveChangeAsync(logger, EntityName, ct);
+        if (saveFailure is not null) return saveFailure;
+
+        await InvalidateCacheAsync();
+        return Result.Updated();
     }
 
     /// <summary>
@@ -168,7 +266,11 @@ public class GuideService(
         entity.DeletedAt = now;
         entity.UpdatedAt = now;
 
-        return await context.TrySaveChangeAsync(logger, EntityName, ct) ?? Result.Success();
+        var saveFailure = await context.TrySaveChangeAsync(logger, EntityName, ct);
+        if (saveFailure is not null) return saveFailure;
+
+        await InvalidateCacheAsync();
+        return Result.Success();
     }
 
     // ══════════════════════════════════════════════════════════
@@ -177,21 +279,29 @@ public class GuideService(
 
     /// <summary>
     /// CreatedAt + Id 커서 페이징 (키워드 검색 선택). 실제 로직은 공통 헬퍼가 담당한다.
+    /// 잘못된 커서/크기는 팩토리 안에서 예외가 되며, 예외는 캐시되지 않는다.
     /// </summary>
     private async Task<CursorPagedResult<GuideSchema.Response>> QueryCursorPageAsync(
         string? cursor, int size, string? keyword, bool descending, CancellationToken ct)
     {
         var normalizedKeyword = NormalizeKeyword(keyword);
-        var source = ApplyKeyword(ActiveGuides.AsNoTracking(), normalizedKeyword);
 
-        var slice = await source.ToCursorSliceAsync(
-            createdAt: x => x.CreatedAt,
-            id: x => x.Id,
-            project: q => q.AsSummary(),
-            keyOf: r => (r.CreatedAt, r.Id),
-            options: new CursorSliceOptions(
-                cursor, size, AppInfrastructure.MaxPageSize, normalizedKeyword, descending),
-            ct: ct);
+        var slice = await CachedAsync(
+            CacheKey("cursor", cursor, size, normalizedKeyword, descending),
+            async token =>
+            {
+                var source = ApplyKeyword(ActiveGuides.AsNoTracking(), normalizedKeyword);
+
+                return await source.ToCursorSliceAsync(
+                    createdAt: x => x.CreatedAt,
+                    id: x => x.Id,
+                    project: q => q.AsSummary(),
+                    keyOf: r => (r.CreatedAt, r.Id),
+                    options: new CursorSliceOptions(
+                        cursor, size, AppInfrastructure.MaxPageSize, normalizedKeyword, descending),
+                    ct: token);
+            },
+            ct);
 
         return CursorPagedResult<GuideSchema.Response>.Success(
             slice.Items, slice.NextCursor, slice.HasMore, slice.TotalCount ?? 0, "커서 목록을 전송했습니다.");
@@ -231,13 +341,26 @@ public class GuideService(
             offset = token.Offset;
         }
 
-        // ── 키워드 → 임베딩 ────────────────────────────────────
-        var (embedding, failure) = await TryEmbedAsync(keyword, ct);
+        // 키는 cursor 문자열이 아니라 offset 으로 만든다 (같은 페이지는 같은 키).
+        var slice = await CachedAsync(
+            CacheKey("semantic", keyword, query.Threshold, query.Size, offset),
+            async token => await SearchVectorSliceAsync(keyword, query.Threshold, query.Size, offset, token),
+            ct);
+
+        return CursorPagedResult<GuideSchema.Response>.Success(
+            slice.Items, slice.NextCursor, slice.HasMore, slice.TotalCount ?? 0, "벡터 유사도 검색 목록을 전송했습니다.");
+    }
+
+    private async Task<CursorSlice<GuideSchema.Response>> SearchVectorSliceAsync(
+        string keyword, float threshold, int size, int offset, CancellationToken ct)
+    {
+        // ── 키워드 → 임베딩 (같은 검색어는 24시간 재사용) ─────────
+        var (embedding, failure) = await TryEmbedQueryAsync(keyword, ct);
         if (embedding is null)
             throw new BuddhamException(failure?.Code ?? RsCode.Error, "검색 서비스를 일시적으로 사용할 수 없습니다.");
 
         var queryVector = new Pgvector.Vector(embedding);
-        var maxDistance = 1f - query.Threshold;
+        var maxDistance = 1f - threshold;
 
         var matched = ActiveGuides.AsNoTracking()
             .Where(x => x.Embedding != null && x.Embedding.CosineDistance(queryVector) <= maxDistance);
@@ -252,22 +375,21 @@ public class GuideService(
             .OrderBy(x => x.Embedding!.CosineDistance(queryVector))
             .ThenBy(x => x.Id)
             .Skip(offset)
-            .Take(query.Size + 1)
+            .Take(size + 1)
             .AsSummary()
             .ToListAsync(ct);
 
-        var nextOffset = offset + query.Size;
-        var hasMore = items.Count > query.Size && nextOffset < MaxSemanticOffset;
+        var nextOffset = offset + size;
+        var hasMore = items.Count > size && nextOffset < MaxSemanticOffset;
 
-        if (items.Count > query.Size)
+        if (items.Count > size)
             items.RemoveAt(items.Count - 1);
 
         var nextCursor = hasMore
-            ? CursorToken.CreateVectorToken(nextOffset, keyword, query.Threshold)
+            ? CursorToken.CreateVectorToken(nextOffset, keyword, threshold)
             : null;
 
-        return CursorPagedResult<GuideSchema.Response>.Success(
-            items, nextCursor, hasMore, totalCount ?? 0, "벡터 유사도 검색 목록을 전송했습니다.");
+        return new CursorSlice<GuideSchema.Response>(items, nextCursor, hasMore, totalCount);
     }
 
     private static string? NormalizeKeyword(string? keyword)
@@ -350,6 +472,39 @@ public class GuideService(
             : (vector, null);
     }
 
+    /// <summary>
+    /// 검색어 임베딩 캐시판. 성공한 벡터만 캐시한다
+    /// (실패는 예외로 팩토리를 빠져나가므로 HybridCache 가 저장하지 않는다).
+    /// </summary>
+    private async Task<(float[]? Vector, Result? Failure)> TryEmbedQueryAsync(string keyword, CancellationToken ct)
+    {
+        Result? failure = null;
+
+        try
+        {
+            var vector = await cache.GetOrCreateAsync(
+                CacheKey("embed", keyword),
+                async token =>
+                {
+                    var (v, f) = await TryEmbedAsync(keyword, token);
+                    if (v is not null) return v;
+
+                    failure = f;
+                    throw new EmbeddingUnavailableException();
+                },
+                EmbeddingCacheOptions,
+                tags: null,
+                cancellationToken: ct);
+
+            return (vector, null);
+        }
+        catch (EmbeddingUnavailableException)
+        {
+            // 동시 호출 중 팩토리를 실행하지 않은 쪽은 failure 가 null 일 수 있다.
+            return (null, failure ?? Result.Failure(RsCode.Error, "임베딩 생성에 실패했습니다."));
+        }
+    }
+
     private static string SummarizeForEmbedding(string? title, string? content)
     {
         var body = (content ?? string.Empty).Trim();
@@ -363,4 +518,14 @@ public class GuideService(
 
         return $"제목: {(title ?? string.Empty).Trim()}\n본문: {body}";
     }
+
+    // ══════════════════════════════════════════════════════════
+    // 캐시 전용 타입 (직렬화 가능한 단순 레코드)
+    // ══════════════════════════════════════════════════════════
+
+    internal sealed record OffsetSlice(List<GuideSchema.Response> Items, int TotalCount);
+
+    internal sealed record Cached<T>(T? Value);
+
+    private sealed class EmbeddingUnavailableException : Exception;
 }

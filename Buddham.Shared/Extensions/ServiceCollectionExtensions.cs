@@ -28,6 +28,8 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -298,19 +300,40 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// 8. Redis
+    /// Redis 연결 1개를 모두가 공유한다.
+    ///  - IConnectionMultiplexer : 컨테이너가 수명 관리(종료 시 Dispose)
+    ///  - IDistributedCache      : 같은 연결을 재사용 (별도 연결 생성 방지)
+    ///  - HybridCache            : L1(파드 메모리) + L2(Redis), 스탬피드 방지, 태그 무효화
+    ///  - IRedisCacheService     : 기존 소비자(Auth/Scripture 등)를 위해 유지
     /// </summary>
-    public static IServiceCollection AddRedisDatabase(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddRedisCaching(this IServiceCollection services, IConfiguration configuration)
     {
-        // * Redis
-        var redisConn = configuration.GetConnectionString(AppInfrastructure.RedisConnection) ??
-                        throw new Exception("Redis connection string is missing!");
+        var redisConn = configuration.GetConnectionString(AppInfrastructure.RedisConnection)
+                        ?? throw new InvalidOperationException("Redis connection string is missing!");
 
-        // 1. 분산 캐시 시스템(IDistributedCache) 활성화
-        services.AddStackExchangeRedisCache(options => options.Configuration = redisConn);
-        // 2. 🌟 인터페이스와 구현체 모두를 커버하는 초강력 싱글톤 주입법!
-        var connectionMultiplexer = ConnectionMultiplexer.Connect(redisConn);
-        services.AddSingleton<IConnectionMultiplexer>(connectionMultiplexer);
-        services.AddSingleton(connectionMultiplexer);
+        // 인스턴스 등록(AddSingleton(instance))은 컨테이너가 Dispose 하지 않는다 → 팩토리로 등록.
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
+
+        // 키 접두사: 같은 Redis 를 다른 용도와 나눠 쓸 때 충돌 방지
+        services.AddStackExchangeRedisCache(options => options.InstanceName = "Buddham:");
+
+        // 위에서 만든 멀티플렉서를 IDistributedCache 가 재사용하도록 연결 (.NET 8+)
+        services.AddOptions<RedisCacheOptions>()
+            .Configure<IConnectionMultiplexer>((options, mux) =>
+                options.ConnectionMultiplexerFactory = () => Task.FromResult(mux));
+
+        // HybridCache 는 등록된 IDistributedCache(Redis)를 자동으로 L2 로 사용한다.
+        services.AddHybridCache(options =>
+        {
+            // 기본 1MB 를 넘는 항목은 캐시되지 않는다. 목록 응답(본문 포함)을 고려해 상향.
+            options.MaximumPayloadBytes = 4 * 1024 * 1024;
+            options.DefaultEntryOptions = new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(5),
+                LocalCacheExpiration = TimeSpan.FromSeconds(30)
+            };
+        });
+
         services.AddSingleton<IRedisCacheService, RedisCacheService>();
         return services;
     }

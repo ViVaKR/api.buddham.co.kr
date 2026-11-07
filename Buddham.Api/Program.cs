@@ -27,7 +27,8 @@ builder.Services.AddBusinessService(builder.Configuration);
 builder.Services.AddDatabases(builder.Configuration);
 
 // * 8 Redis
-builder.Services.AddRedisDatabase(builder.Configuration);
+builder.Services.AddRedisCaching(builder.Configuration);
+// builder.Services.AddRedisDatabase(builder.Configuration);
 
 var app = builder.Build();
 
