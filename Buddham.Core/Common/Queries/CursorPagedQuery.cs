@@ -11,6 +11,6 @@ public class CursorPagedQuery
         set => field = Math.Clamp(value, 1, MaxSize);
     } = MaxSize;
 
-    public string? SearchKeyword { get; set; } = null; 
-    public bool Descending { get; set; } = true; 
+    public string? SearchKeyword { get; set; } = null;
+    public bool Descending { get; set; } = true;
 }

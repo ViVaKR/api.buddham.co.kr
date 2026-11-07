@@ -4,6 +4,7 @@ using Buddham.Core.Entities.Comment;
 using Buddham.Core.Interfaces.Auth;
 using Buddham.Core.Interfaces.Cache;
 using Buddham.Core.Interfaces.Comment;
+using Buddham.Core.Interfaces.Common;
 using Buddham.Core.Interfaces.Log;
 using Buddham.Core.Interfaces.Ollama;
 using Buddham.Core.Interfaces.Public;
@@ -16,6 +17,7 @@ using Buddham.Shared.Middlewares;
 using Buddham.Shared.Services.Auth;
 using Buddham.Shared.Services.Cache;
 using Buddham.Shared.Services.Comment;
+using Buddham.Shared.Services.Common;
 using Buddham.Shared.Services.Log;
 using Buddham.Shared.Services.OllamaService;
 using Buddham.Shared.Services.Public;
@@ -200,6 +202,7 @@ public static class ServiceCollectionExtensions
         services.AddValidatorsFromAssemblyContaining<AuthService>();
 
         // 👑 4. [Api 기지국 풀 모드] 메인 서버용 무거운 중화기 군단 총출동!
+
         // ================== [이메일 연합군] ==================
         services.AddOptions<EmailConfigOptions>()
             .Bind(configuration.GetSection(EmailConfigOptions.SectionName))
@@ -213,8 +216,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailAuthService, EmailAuthService>();
         services.AddScoped<IEmailTemplateService, EmailTemplateService>();
         services.AddScoped<ITwoFactorService, TwoFactorService>();
-
-
 
         // ================== [인증 및 코어 연합군] ==================
         services.AddScoped<IAuthService, AuthService>();
@@ -234,12 +235,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGuideService, GuideService>();
         services.AddScoped<ITangwhaService, TangwhaService>();
 
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IEntityAuthorizationService, EntityAuthorizationService>();
+        services.AddScoped<IEmbeddingService, EmbeddingService>();
+
         // ================== [댓글 서비스] =====================
         services.AddScoped<ICommentService, CommentService>();
 
         // ================== [개별댓글 서비스] ==================
         services.AddScoped(sp => new GenericCommentService<GuideComment, GuideCommentLike>(sp.GetRequiredService<PublicDbContext>()));
         services.AddScoped(x => new GenericCommentService<TangwhaComment, TangwhaCommentLike>(x.GetRequiredService<PublicDbContext>()));
+
+
 
         return services;
     }

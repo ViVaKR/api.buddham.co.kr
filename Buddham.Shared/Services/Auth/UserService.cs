@@ -7,6 +7,7 @@ using Buddham.Core.Schemas;
 using Buddham.Shared.Data;
 using Buddham.Shared.Extensions.Auth;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Buddham.Shared.Services.Auth;
@@ -20,15 +21,15 @@ public class UserService(
     /// Get List ALL
     /// AsSummary()
     /// </summary>
-    public async Task<Result<IEnumerable<UserSchema.Response>>> GetAsync()
+    public async Task<Result<IEnumerable<UserSchema.Response>>> GetAsync(CancellationToken ct = default)
     {
         var users = await context.Users.AsNoTracking()
             .IgnoreQueryFilters()
             .Include(u => u.UserRoles)
-            .ThenInclude(Ur => Ur.Role) // 명시적 Include! 
+            .ThenInclude(Ur => Ur.Role) // 명시적 Include!
             .AsSplitQuery()
             .AsSummary()
-            .ToListAsync();
+            .ToListAsync(ct);
         return Result<IEnumerable<UserSchema.Response>>.Success(users, null, "OK");
     }
 
@@ -62,7 +63,7 @@ public class UserService(
 
             // PostgreSQL의 ILIKE 연산자로 번역되어 대소문자 구분 없이 검색을 수행합니다.
             // ※ 주의: 인프라 레벨에서 관련 컬럼들에 pg_trgm GIN 인덱스가 생성되어 있어야 대용량 데이터에서 Scan 성능이 보장됩니다.
-            // ※ 팁: string.IsNullOrWhiteSpace(x.FullName) 조건은 EF Core 번역 시 불필요한 IS NOT NULL 조건을 양산할 수 있으므로, 
+            // ※ 팁: string.IsNullOrWhiteSpace(x.FullName) 조건은 EF Core 번역 시 불필요한 IS NOT NULL 조건을 양산할 수 있으므로,
             //       DB 컬럼이 널 허용(Nullable)이 아니라면 EF.Functions.ILike 만 남겨두는 것이 SQL이 더 깔끔해집니다.
             baseQuery = baseQuery.Where(x =>
                 EF.Functions.ILike(x.FullName, $"%{k}%") ||
@@ -75,7 +76,7 @@ public class UserService(
         var totalCount = 0;
 
         // ── 2단계: 📊 전체 카운트 계산 (선택적 최적화) ──────────────────────────────────
-        // 무한 스크롤(커서 페이징)의 핵심은 전체 카운트를 매번 안 세는 것이지만, 
+        // 무한 스크롤(커서 페이징)의 핵심은 전체 카운트를 매번 안 세는 것이지만,
         // 첫 페이지 진입 시점에 한해서 전체 데이터 개수를 UI에 보여주기 위해 선택적으로 Count를 수행합니다.
         if (string.IsNullOrWhiteSpace(query.Cursor))
         {
@@ -128,7 +129,7 @@ public class UserService(
         // 현재 페이지의 '가장 마지막 데이터'의 시간과 고유 ID를 조합하여
         // 다음 페이지의 시작점이 될 커서 토큰을 구워냅니다.
         var lastItem = executionItems.Last();
-        nextCursor = CursorToken.Create(lastItem.CreatedAt, lastItem.Id);
+        nextCursor = CursorToken.CreateTokenByGuid(lastItem.CreatedAt, lastItem.Id);
 
         return CursorPagedResult<UserSchema.Response>
             .Success(mappedResponses, nextCursor, hasMore, totalCount, "커서 목록을 전송했습니다.");
@@ -156,7 +157,7 @@ public class UserService(
                     .ILike(x.Introduction, $"%{k}%")) ||
 
                 // ⚡ 2. 기본 유니크 B-Tree 인덱스를 타고 빛의 속도로 앞글자 검색할 이메일!
-                // NormalizedEmail은 대문자이므로 StartsWith(upperK)를 쓰면 디비가 0.001초 검색 
+                // NormalizedEmail은 대문자이므로 StartsWith(upperK)를 쓰면 디비가 0.001초 검색
                 (!string.IsNullOrWhiteSpace(x.NormalizedEmail) && x.NormalizedEmail.StartsWith(upperK))
             );
         }
@@ -285,7 +286,7 @@ public class UserService(
     /// DELETE 회원삭제
     /// Soft Delete
     /// </summary>
-    public async Task<Result> DeleteAsync(string id)
+    public async Task<Result> DeleteAsync(string id, CancellationToken ct = default)
     {
         var user = await userManager.FindByIdAsync(id);
         if (user is null)
@@ -328,53 +329,4 @@ public class UserService(
         return Result<IEnumerable<UserSchema.Response>>.Success(users, null, "전지적 신의 눈으로 전체 유저 조회 성공");
     }
 
-    // public async Task<Result<IEnumerable<UserSchema.Response>>> GetAsync()
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<CursorPagedResult<UserSchema.Response>> GetCursorListAsync(CursorPagedQuery query, CancellationToken ct)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<OffsetPagedResult<UserSchema.Response>> GetOffsetListAsync(OffsetPagedQuery query, CancellationToken ct)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<CursorPagedResult<UserSchema.Response>> GetSemanticListAsync(SemanticSearchQuery query, CancellationToken ct)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<Result<UserSchema.Response>> GetByIdAsync(string id)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<Result> CreateAsync(UserSchema.Request request, CancellationToken ct)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<Result> UpdateAsync(string id, UserSchema.Request request, CancellationToken ct)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<Result> RestoreAsync(string id)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<Result> DeleteAsync(string id)
-    // {
-    //     throw new NotImplementedException();
-    // }
-    //
-    // public async Task<Result<IEnumerable<UserSchema.Response>>> GetUsersForAdminAsync(CancellationToken ct)
-    // {
-    //     throw new NotImplementedException();
-    // }
 }

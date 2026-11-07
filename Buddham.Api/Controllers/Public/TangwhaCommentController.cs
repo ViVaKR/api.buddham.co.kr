@@ -26,7 +26,7 @@ public class TangwhaCommentController(
         // 값이 있을 때만 할당하고 없으면, GenericCommentService 에서 부모를 통해 처리 하도록 넘김
         if (request.TargetId.HasValue)
         {
-            comment.GuideId = request.TargetId.Value;
+            comment.TangwhaId = request.TargetId.Value;
         }
         else if (!request.ParentId.HasValue)
         {

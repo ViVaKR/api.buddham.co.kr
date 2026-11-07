@@ -12,7 +12,7 @@ public interface IBaseService<TId, TRequest, TResponse> where TId : IEquatable<T
     /// <summary>
     /// 전체 목록조회
     /// </summary>
-    Task<Result<IEnumerable<TResponse>>> GetAsync();
+    Task<Result<IEnumerable<TResponse>>> GetAsync(CancellationToken ct = default);
 
     // ══════════════════════════════════════════
     // ✏️ CRUD
@@ -31,7 +31,7 @@ public interface IBaseService<TId, TRequest, TResponse> where TId : IEquatable<T
     /// <summary>
     /// 삭제
     /// </summary>
-    Task<Result> DeleteAsync(TId id);
+    Task<Result> DeleteAsync(TId id, CancellationToken ct = default);
 }
 
 // ── 무한 스크롤/피드형 목록이 필요한 곳만 ──
@@ -64,5 +64,5 @@ public interface IDetailQueryableService<TId, TResponse> where TId : IEquatable<
     /// <summary>
     /// 단건 조회
     /// </summary>
-    Task<Result<TResponse>> GetByIdAsync(TId id);
+    Task<Result<TResponse>> GetByIdAsync(TId id, CancellationToken ct = default);
 }

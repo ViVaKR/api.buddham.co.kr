@@ -8,7 +8,7 @@ public static class GuideExtensions
     extension(IQueryable<Guide> query)
     {
         /// <summary>
-        /// 목록
+        /// 목록 프로젝션 (Embedding / SearchVector 등 무거운 컬럼은 읽지 않는다)
         /// </summary>
         public IQueryable<GuideSchema.Response> AsSummary()
         {
@@ -28,7 +28,7 @@ public static class GuideExtensions
     extension(Guide entity)
     {
         /// <summary>
-        /// 단건 조회
+        /// 단건 변환
         /// </summary>
         public GuideSchema.Response AsDetail()
         {
@@ -40,33 +40,43 @@ public static class GuideExtensions
                 Content = entity.Content,
                 CreatedAt = entity.CreatedAt,
                 UpdatedAt = entity.UpdatedAt,
-                UserId = entity.UserId,
+                UserId = entity.UserId
             };
         }
 
-        public void ApplyPatch(GuideSchema.Request request, float[]? embedding = null)
+        /// <summary>
+        /// 전체 덮어쓰기(Full Replace). 부분 패치가 아니다.
+        /// embedding 이 null 이면 기존 Embedding 을 유지한다.
+        /// </summary>
+        public void ApplyUpdate(GuideSchema.Request request, DateTime now, float[]? embedding = null)
         {
             entity.GuideCategory = request.GuideCategory;
-            entity.Title = request.Title;
-            entity.Content = request.Content;
-            entity.UpdatedAt = DateTime.UtcNow;
-            // 🆕 임베딩이 새로 생성된 경우에만 업데이트
-            // null 이면 기존 Embedding 그대로 유지
-            if (embedding != null)
+            entity.Title = request.Title.Trim();
+            entity.Content = request.Content.Trim();
+            entity.UpdatedAt = now;
+
+            if (embedding is not null)
                 entity.Embedding = embedding;
         }
     }
 
     extension(GuideSchema.Request request)
     {
-        public Guide ToEntity()
+        /// <summary>
+        /// 생성용 엔티티 변환. UserId 누락(Guid.Empty 저장)을 막기 위해 필수 인자로 받는다.
+        /// </summary>
+        public Guide ToEntity(Guid userId, DateTime now)
         {
+            if (userId == Guid.Empty)
+                throw new ArgumentException("UserId 가 필요합니다.", nameof(userId));
+
             return new Guide
             {
+                UserId = userId,
                 GuideCategory = request.GuideCategory,
-                Title = request.Title,
-                Content = request.Content,
-                CreatedAt = DateTime.UtcNow,
+                Title = request.Title.Trim(),
+                Content = request.Content.Trim(),
+                CreatedAt = now,
                 UpdatedAt = null,
                 Embedding = null
             };

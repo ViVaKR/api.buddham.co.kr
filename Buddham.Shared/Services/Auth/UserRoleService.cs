@@ -19,7 +19,7 @@ public class UserRoleService(
     /// GET List ALL
     /// AsSummary()
     /// </summary>
-    public async Task<Result<IEnumerable<UserRoleSchema.Response>>> GetAsync()
+    public async Task<Result<IEnumerable<UserRoleSchema.Response>>> GetAsync(CancellationToken ct = default)
     {
         var query = context.Roles.AsNoTracking();
         var res = await query.AsSummary().ToListAsync();
@@ -66,7 +66,7 @@ public class UserRoleService(
                 var cursorDateTime = new DateTime(cursorTicks, DateTimeKind.Utc);
 
                 // 마지막으로 본 날짜보다 과거이거나, 날짜가 같으면 마지막으로 본 ID보다 문자열 순서가 뒤인 녀석만!"
-                // 🔥 [Guid 맞춤형 조건절] 
+                // 🔥 [Guid 맞춤형 조건절]
                 // EF Core가 PostgreSQL에서 가장 아름다운 SQL을 뽑아내도록 유도!
                 baseQuery = baseQuery.Where(x =>
                     x.CreatedAt < cursorDateTime ||
@@ -75,7 +75,7 @@ public class UserRoleService(
         }
 
         // 4. 🔥 정렬 핏 고정 (날짜 내림차순, Id 오름차순으로 완벽한 고유 순서 보장)
-        // 💡 다음 페이지 존재 여부(HasMore) 판별을 위해 요청 사이즈보다 1개 더 땡겨오기(Size + 1)!! 
+        // 💡 다음 페이지 존재 여부(HasMore) 판별을 위해 요청 사이즈보다 1개 더 땡겨오기(Size + 1)!!
         var rawItems = await baseQuery
             .OrderByDescending(x => x.CreatedAt)
             .ThenBy(x => x.Id)
@@ -91,13 +91,13 @@ public class UserRoleService(
         // 6. 앵귤러 항구로 보낼 DTO 매핑 처리
         var mappedResponses = executionItems.AsSummary().ToList();
 
-        // 7. 🚀 다음 앵귤러가 들고 올 'NextCursor' 토큰 제조 
+        // 7. 🚀 다음 앵귤러가 들고 올 'NextCursor' 토큰 제조
         string? nextCursor = null;
         if (hasMore && executionItems.Any())
         {
             var lastItem = executionItems.Last();
             // 마지막 데이터의 정렬 기준 시간과 Id를 바인딩하여 캡슐화!
-            nextCursor = CursorToken.Create(lastItem.CreatedAt, lastItem.Id);
+            nextCursor = CursorToken.CreateTokenByGuid(lastItem.CreatedAt, lastItem.Id);
         }
 
         // 8. 명품 보따리에 담아서 리턴
@@ -212,7 +212,7 @@ public class UserRoleService(
     /// Delete
     /// 역할 정보 소프트 삭제 (50세기형 하이테크 버전)
     /// </summary>
-    public async Task<Result> DeleteAsync(string id)
+    public async Task<Result> DeleteAsync(string id, CancellationToken ct = default)
     {
         // 1. 삭제할 대상을 최신 버전으로 땡겨온다!
         var role = await roleManager.FindByIdAsync(id);
@@ -234,7 +234,7 @@ public class UserRoleService(
         try
         {
             // 🚨 무자비한 DeleteAsync 대신 'UpdateAsync'를 호출하여 소프트 삭제 안착!
-            // 내부적으로 PostgreSQL의 xmin(RowVersion)도 새로운 트랜잭션 ID로 갱신되면서 
+            // 내부적으로 PostgreSQL의 xmin(RowVersion)도 새로운 트랜잭션 ID로 갱신되면서
             // 완벽한 동시성 제어까지 한틀에 묶여 돌아간다네!
             var result = await roleManager.UpdateAsync(role);
 

@@ -50,7 +50,7 @@ public class GuideCommentConfiguration : IEntityTypeConfiguration<GuideComment>,
 
         // -- 인덱스 --
         builder.HasIndex(x => new { x.GuideId, x.CreatedAt })
-            .HasDatabaseName("ix_guide_comments_guide_id_create_at");
+            .HasDatabaseName("ix_guide_comments_guide_id_created_at");
 
         builder.HasIndex(x => new { x.RootId, x.CreatedAt })
             .HasFilter("root_id IS NOT NULL")

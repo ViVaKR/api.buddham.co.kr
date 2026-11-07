@@ -1,433 +1,366 @@
-using System.Security.Claims;
 using Buddham.Core.Common;
 using Buddham.Core.Common.Queries;
 using Buddham.Core.Common.Results;
-using Buddham.Core.Entities.Auth;
-using Buddham.Core.Interfaces.Ollama;
+using Buddham.Core.Entities.Public;
+using Buddham.Core.Interfaces.Common;
 using Buddham.Core.Interfaces.Public;
 using Buddham.Core.Schemas;
+using Buddham.Shared.Constants;
 using Buddham.Shared.Data;
+using Buddham.Shared.Extensions.Persistence;
 using Buddham.Shared.Extensions.Public;
-using Microsoft.AspNetCore.Identity;
+using Buddham.Shared.Middlewares;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Pgvector.EntityFrameworkCore;
 
 namespace Buddham.Shared.Services.Public;
 
 public class GuideService(
     PublicDbContext context,
-    IOllamaService ollamaService,
-    UserManager<ApplicationUser> userManager) : IGuideService
+    ICurrentUserService currentUser,
+    IEntityAuthorizationService authorization,
+    IEmbeddingService embeddingService,
+    TimeProvider timeProvider,
+    ILogger<GuideService> logger
+) : IGuideService
 {
-    public async Task<Result<IEnumerable<GuideSchema.Response>>> GetAsync()
+    private const string EntityName = "법문 가이드";
+
+    // 필요하면 AppInfrastructure 로 옮긴다.
+    private const int MaxContentLength = 100_000;
+
+    // 벡터 검색은 Offset 에뮬레이션이라 깊은 페이지일수록 비싸다. 상한을 둔다.
+    private const int MaxSemanticOffset = 1_000;
+
+    // ══════════════════════════════════════════════════════════
+    // 공통 헬퍼
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 소프트 삭제되지 않은 데이터만. 모든 조회/수정은 반드시 이것을 통해서만 접근한다.
+    /// (전역 쿼리 필터를 이미 쓰고 있다면 Where 는 중복이지만 무해하다.)
+    /// </summary>
+    private IQueryable<Guide> ActiveGuides => context.Guides.Where(x => x.DeletedAt == null);
+
+    private DateTime UtcNow => timeProvider.GetUtcNow().UtcDateTime;
+
+    // ══════════════════════════════════════════════════════════
+    // 조회
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 전체 목록. 무제한 반환을 막기 위해 MaxPageSize 로 상한을 둔다.
+    /// </summary>
+    public async Task<Result<IEnumerable<GuideSchema.Response>>> GetAsync(CancellationToken ct)
     {
-        var data = await context.Guides.AsNoTracking().AsSummary().ToListAsync();
+        var data = await ActiveGuides.AsNoTracking()
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(AppInfrastructure.MaxPageSize)
+            .AsSummary()
+            .ToListAsync(ct);
+
         return Result<IEnumerable<GuideSchema.Response>>.Success(data, null, "전체목록 반환 성공");
     }
 
-    public async Task<CursorPagedResult<GuideSchema.Response>> GetCursorListAsync(CursorPagedQuery query, CancellationToken ct)
+    public Task<CursorPagedResult<GuideSchema.Response>> GetCursorListAsync(
+        CursorPagedQuery query, CancellationToken ct)
+        => QueryCursorPageAsync(query.Cursor, query.Size, query.SearchKeyword, query.Descending, ct);
+
+    public async Task<OffsetPagedResult<GuideSchema.Response>> GetOffsetListAsync(
+        OffsetPagedQuery query, CancellationToken ct)
     {
-        var baseQuery = context.Guides.AsNoTracking();
+        if (query.PageNumber < 1)
+            throw new BuddhamException(RsCode.BadRequest, "페이지 번호는 1 이상이어야 합니다.");
 
-        if (!string.IsNullOrWhiteSpace(query.SearchKeyword))
-        {
-            var k = query.SearchKeyword.Trim();
-            baseQuery = baseQuery.Where(x =>
-                EF.Functions.Like(x.Title, $"%{k}%") ||
-                EF.Functions.Like(x.Content, $"%{k}%"));
-        }
+        if (query.PageSize is < 1 or > AppInfrastructure.MaxPageSize)
+            throw new BuddhamException(RsCode.BadRequest,
+                $"페이지 크기는 1~{AppInfrastructure.MaxPageSize} 사이여야 합니다.");
 
-        var totalCount = 0;
-
-        if (string.IsNullOrWhiteSpace(query.Cursor))
-            totalCount = await baseQuery.CountAsync(ct);
-
-        if (!string.IsNullOrWhiteSpace(query.Cursor))
-        {
-            var (cursorTicks, cursorId) = CursorToken.ParseToken(query.Cursor);
-            if (cursorTicks > 0 && cursorId != 0)
-            {
-                var cursorDateTime = new DateTime(cursorTicks, DateTimeKind.Utc);
-                baseQuery = baseQuery.Where(x =>
-                    x.CreatedAt < cursorDateTime ||
-                    (x.CreatedAt == cursorDateTime && x.Id > cursorId));
-            }
-        }
-
-        var rawItems = await baseQuery
-            .OrderByDescending(x => x.CreatedAt)
-            .ThenByDescending(x => x.Id)
-            .Take(query.Size + 1)
-            .ToListAsync(ct);
-
-        var hasMore = rawItems.Count > query.Size;
-        var executionItems = rawItems.Take(query.Size).AsQueryable();
-        var mappedResponses = executionItems.AsSummary().ToList();
-
-        string? nextCursor = null;
-        if (!hasMore || mappedResponses.Count == 0)
-        {
-            return CursorPagedResult<GuideSchema.Response>.Success
-                (mappedResponses, nextCursor, hasMore, totalCount, "커서 목록을 전송했습니다.");
-        }
-
-        var lastItem = executionItems.Last();
-        nextCursor = CursorToken.CreateToken(lastItem.CreatedAt, lastItem.Id);
-
-        return CursorPagedResult<GuideSchema.Response>.Success(
-            mappedResponses,
-            nextCursor,
-            hasMore,
-            totalCount,
-            "커서 목록을 전송했습니다.");
-    }
-
-    public async Task<OffsetPagedResult<GuideSchema.Response>> GetOffsetListAsync(OffsetPagedQuery query, CancellationToken ct)
-    {
-        var baseQuery = context.Guides.AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(query.SearchKeyword))
-        {
-            var k = query.SearchKeyword.Trim();
-            baseQuery = baseQuery.Where(x =>
-                EF.Functions.ILike(x.Title, $"%{k}%") ||
-                EF.Functions.ILike(x.Content, $"%{k}%"));
-        }
-
-        baseQuery = query.SortBy switch
-        {
-            "creaateAt" => baseQuery.OrderBy(x => x.CreatedAt),
-            "title" => baseQuery.OrderBy(x => x.Title),
-            "id" => baseQuery.OrderByDescending(x => x.Id),
-            _ => baseQuery.OrderByDescending(x => x.CreatedAt)
-        };
-
+        var baseQuery = ApplyKeyword(ActiveGuides.AsNoTracking(), NormalizeKeyword(query.SearchKeyword));
         var totalCount = await baseQuery.CountAsync(ct);
 
-        var data = await baseQuery.Skip(query.PageSize * (query.PageNumber - 1))
-            .Take(query.PageSize)
+        var data = await ApplySort(baseQuery, query.SortBy, query.Descending)
+            .ApplyOffset(query.PageNumber, query.PageSize)
             .AsSummary()
-            .ToListAsync(cancellationToken: ct);
+            .ToListAsync(ct);
 
         return OffsetPagedResult<GuideSchema.Response>.Success(
-            data,
-            totalCount,
-            query.PageNumber,
-            query.PageSize,
-            "오프셋 페이지 목록 전송완료");
+            data, totalCount, query.PageNumber, query.PageSize, "오프셋 페이지 목록 전송완료");
     }
 
-    public async Task<CursorPagedResult<GuideSchema.Response>> GetSemanticListAsync(SemanticSearchQuery query, CancellationToken ct)
+    public Task<CursorPagedResult<GuideSchema.Response>> GetSemanticListAsync(
+        SemanticSearchQuery query, CancellationToken ct)
     {
-        // ── 🔀 분기점: 벡터 검색 vs 기존 커서 페이징 ──────────────────────────
-        // SearchKeyword가 있으면 벡터 유사도 검색 경로로 진입
-        if (!string.IsNullOrWhiteSpace(query.Keyword))
-            return await HandleVectorSearchAsync(query, ct);
-
-        return await HandleCursorPagedAsync(query, ct);
+        return string.IsNullOrWhiteSpace(query.Keyword)
+            ? QueryCursorPageAsync(query.Cursor, query.Size, null, true, ct)
+            : HandleVectorSearchAsync(query, ct);
     }
 
-    public async Task<Result<GuideSchema.Response>> GetByIdAsync(long id)
+    public async Task<Result<GuideSchema.Response>> GetByIdAsync(long id, CancellationToken ct)
     {
-        var entity = await context.Guides.FirstOrDefaultAsync(x => x.Id == id);
-        if (entity == null)
-            return Result<GuideSchema.Response>.NotFound();
-        var payload = entity.AsDetail();
-        return Result<GuideSchema.Response>.Success(payload, null, "OK");
+        var data = await ActiveGuides.AsNoTracking()
+            .Where(x => x.Id == id)
+            .AsSummary()
+            .FirstOrDefaultAsync(ct);
+
+        return data is null
+            ? Result<GuideSchema.Response>.NotFound()
+            : Result<GuideSchema.Response>.Success(data, null, "OK");
     }
 
-    /// <summary>
-    /// 생성
-    /// </summary>
+    // ══════════════════════════════════════════════════════════
+    // 생성 / 수정 / 삭제
+    // ══════════════════════════════════════════════════════════
+
     public async Task<Result> CreateAsync(GuideSchema.Request request, CancellationToken ct)
     {
-        var user = await userManager.FindByNameAsync(ClaimTypes.NameIdentifier);
+        if (currentUser.UserId is not { } userId)
+            return Result.Failure(RsCode.Unauthorized, "로그인이 필요합니다.");
 
-        if (user is null) return Result.Forbidden();
+        if (ValidateRequest(request) is { } invalid) return invalid;
 
-        // ── 1. 입력값 검증 ────────────────────────────────────────
-        if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Content))
-            return Result.Failure(RsCode.BadRequest, "제목과 본문은 필수입니다.");
+        var (vector, failure) = await TryEmbedAsync(SummarizeForEmbedding(request.Title, request.Content), ct);
+        if (failure is not null) return failure;
 
-        // ── 2. 임베딩 텍스트 조합 ─────────────────────────────────
-        // 테이블마다 이 부분만 맞춤 설정
-        var textToEmbed = SummarizeForEmbedding(request);
+        var entity = request.ToEntity(userId, UtcNow);
+        entity.Embedding = vector;
 
-        // ── 3. 임베딩 생성 (Ollama / bge-m3) ─────────────────────
-        float[] vectorData;
-        try
-        {
-            vectorData = await ollamaService.GetEmbeddingAsync(textToEmbed, ct);
-        }
-        catch (HttpRequestException ex)
-        {
-            // Ollama 서버 다운 or 네트워크 오류
-            // → DB 저장 없이 즉시 반환 (글로벌 핸들러 불필요)
-            return Result.Failure(RsCode.Error, $"임베딩 서비스에 연결할 수 없습니다.- {ex.Message}");
-        }
-        catch (InvalidOperationException ex)
-        {
-            // 차원 불일치 등 OllamaService 내부 검증 실패
-            return Result.Failure(RsCode.BadRequest, ex.Message);
-        }
-
-        var entity = request.ToEntity();
-        entity.UserId = user.Id;
-        entity.Embedding = vectorData;
-
-        // ── 4. 엔티티 구성 ────────────────────────────────────────
         context.Guides.Add(entity);
-
-        // ── 5. 저장 ───────────────────────────────────────────────
-        try
-        {
-            await context.SaveChangesAsync(ct);
-            return Result.Success("법문 가이드가 성공적으로 저장되었습니다.");
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            return Result.Conflict($"다른 사용자가 동시에 처리 중입니다. 다시 시도해주세요. - {ex.Message}");
-        }
-        catch (DbUpdateException ex)
-        {
-            // 유니크 제약, FK 위반 등 DB 레벨 오류
-            return Result.Error($"데이터 저장 중 오류가 발생했습니다. - {ex.Message}");
-        }
+        return await context.TrySaveChangeAsync(logger, EntityName, ct) ?? Result.Created();
     }
 
-    /// <summary>
-    /// 수정
-    /// UPDATE
-    /// </summary>
     public async Task<Result> UpdateAsync(long id, GuideSchema.Request request, CancellationToken ct)
     {
-        // ── 1. 단건 조회 ──────────────────────────────────────────
-        var entity = await context.Guides
-            .FirstOrDefaultAsync(x => x.Id == id && x.DeletedAt == null, ct);
+        if (ValidateRequest(request) is { } invalid) return invalid;
 
-        if (entity == null)
-            return Result.NotFound();
+        var entity = await ActiveGuides.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Result.NotFound();
+        if (!authorization.CanModify(entity.UserId)) return Result.Forbidden();
 
-        // ── 2. 임베딩 재생성 (Title/Content 변경 시에만) ──────────
-        // 변경 없으면 Ollama 호출 스킵 → 비용/레이턴시 절감
+        // 임베딩 입력 텍스트가 바뀌었거나, 기존 임베딩이 없을 때만 재생성
+        var newText = SummarizeForEmbedding(request.Title, request.Content);
+        var oldText = SummarizeForEmbedding(entity.Title, entity.Content);
+
         float[]? newEmbedding = null;
-        var isContentChanged = entity.Title != request.Title
-                               || entity.Content != request.Content;
-
-        if (isContentChanged)
+        if (entity.Embedding is null || newText != oldText)
         {
-            try
-            {
-                var textToEmbed = SummarizeForEmbedding(request);
-
-                var vectorData = await ollamaService.GetEmbeddingAsync(textToEmbed, ct);
-
-                newEmbedding = vectorData;
-            }
-            catch (HttpRequestException ex)
-            {
-                return Result.Failure(RsCode.Error, $"임베딩 서비스에 연결할 수 없습니다. - " +
-                                                    $"{ex.Message}");
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Result.Failure(RsCode.BadRequest, ex.Message);
-            }
+            var (vector, failure) = await TryEmbedAsync(newText, ct);
+            if (failure is not null) return failure;
+            newEmbedding = vector;
         }
 
-        // ── 3. 엔티티 패치 ────────────────────────────────────────
-        entity.ApplyPatch(request, newEmbedding);
-
-        // ── 4. 저장 ───────────────────────────────────────────────
-        try
-        {
-            await context.SaveChangesAsync(ct);
-            return Result.Updated("법문 가이드가 성공적으로 수정되었습니다.");
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            return Result.Conflict($"다른 사용자가 이미 수정했습니다. 새로고침 후 다시 시도해주세요. - " +
-                                   $"{ex.Message}");
-        }
-        catch (DbUpdateException ex)
-        {
-            return Result.Error($"데이터 저장 중 오류가 발생했습니다. - {ex.Message}");
-        }
+        entity.ApplyUpdate(request, UtcNow, newEmbedding);
+        return await context.TrySaveChangeAsync(logger, EntityName, ct) ?? Result.Updated();
     }
 
     /// <summary>
-    /// DELETE
-    /// 삭제
+    /// 소프트 삭제
     /// </summary>
-    public async Task<Result> DeleteAsync(long id)
+    public async Task<Result> DeleteAsync(long id, CancellationToken ct)
     {
-        var data = await context.Guides.FirstOrDefaultAsync(x => x.Id == id);
-        if (data == null)
-            return Result.NotFound();
-        data.DeletedAt = DateTime.UtcNow;
-        data.UpdatedAt = DateTime.UtcNow;
-        try
-        {
-            await context.SaveChangesAsync();
-            return Result.Success();
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            return Result.Conflict($"다른 사용자가 이미 데이터를 삭제 했습니다. - {ex.Message}");
-        }
+        var entity = await ActiveGuides.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Result.NotFound();
+        if (!authorization.CanModify(entity.UserId)) return Result.Forbidden();
+
+        var now = UtcNow;
+        entity.DeletedAt = now;
+        entity.UpdatedAt = now;
+
+        return await context.TrySaveChangeAsync(logger, EntityName, ct) ?? Result.Success();
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // 페이징 / 검색 내부 구현
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// CreatedAt + Id 커서 페이징 (키워드 검색 선택). 실제 로직은 공통 헬퍼가 담당한다.
+    /// </summary>
+    private async Task<CursorPagedResult<GuideSchema.Response>> QueryCursorPageAsync(
+        string? cursor, int size, string? keyword, bool descending, CancellationToken ct)
+    {
+        var normalizedKeyword = NormalizeKeyword(keyword);
+        var source = ApplyKeyword(ActiveGuides.AsNoTracking(), normalizedKeyword);
+
+        var slice = await source.ToCursorSliceAsync(
+            createdAt: x => x.CreatedAt,
+            id: x => x.Id,
+            project: q => q.AsSummary(),
+            keyOf: r => (r.CreatedAt, r.Id),
+            options: new CursorSliceOptions(
+                cursor, size, AppInfrastructure.MaxPageSize, normalizedKeyword, descending),
+            ct: ct);
+
+        return CursorPagedResult<GuideSchema.Response>.Success(
+            slice.Items, slice.NextCursor, slice.HasMore, slice.TotalCount ?? 0, "커서 목록을 전송했습니다.");
     }
 
     /// <summary>
-    /// pgvector 코사인 유사도 기반 검색 + Offset 커서 에뮬레이
+    /// pgvector 코사인 유사도 검색 + Offset 커서 에뮬레이션
     /// </summary>
     private async Task<CursorPagedResult<GuideSchema.Response>> HandleVectorSearchAsync(
-        SemanticSearchQuery query,
-        CancellationToken ct
-    )
+        SemanticSearchQuery query, CancellationToken ct)
     {
-        var keyword = query.Keyword?.Trim();
-        var currentOffset = 0;
-        // ── 커서에서 Offset 복원 ──────────────────────────────────────────────
-        // 두 번째 페이지 이후 요청이라면 커서에서 offset과 keyword를 꺼냄
+        if (query.Size is < 1 or > AppInfrastructure.MaxPageSize)
+            throw new BuddhamException(RsCode.BadRequest,
+                $"페이지 크기는 1~{AppInfrastructure.MaxPageSize} 사이여야 합니다.");
+
+        var keyword = query.Keyword!.Trim();
+
+        if (keyword.Length > AppInfrastructure.MaxKeywordLength)
+            throw new BuddhamException(RsCode.BadRequest,
+                $"검색어는 {AppInfrastructure.MaxKeywordLength}자 이하여야 합니다.");
+
+        // NaN 도 이 조건에서 걸러진다
+        if (!(query.Threshold is >= 0f and <= 1f))
+            throw new BuddhamException(RsCode.BadRequest, "Threshold 는 0 ~ 1 사이어야 합니다.");
+
+        // ── 커서에서 offset 복원 ───────────────────────────────
+        var offset = 0;
         if (!string.IsNullOrWhiteSpace(query.Cursor))
         {
-            var (isVector, parsedOffset, parsedKeyword) = CursorToken.ParseVectorToken(query.Cursor);
-            // 🛡️ 커서 위변조 방지: 키워드가 다르면 커서 무효화하고 처음부터 검색
-            if (isVector && parsedKeyword == keyword)
-                currentOffset = parsedOffset;
+            if (!CursorToken.TryParseVectorToken(query.Cursor, out var token)
+                || token is null
+                || token.Keyword != keyword
+                || token.Threshold != query.Threshold
+                || token.Offset > MaxSemanticOffset)
+                throw new BuddhamException(RsCode.BadRequest, "유효하지 않거나 검색 조건이 변경된 커서입니다.");
+
+            offset = token.Offset;
         }
 
-        // ── 1단계: 키워드 → 임베딩 벡터 변환 ────────────────────────────────
-        var embeddingArray = await ollamaService.GetEmbeddingAsync(keyword!, ct);
-        var queryVector = new Pgvector.Vector(embeddingArray);
-        // ── 2단계: 전체 카운트 (첫 페이지 진입 시에만) ───────────────────────
-        var totalCount = 0;
-        if (currentOffset == 0)
-        {
-            // 임계값 이상인 유사 문서 전체 수 계산
-            totalCount = await context.Guides
-                .AsNoTracking()
-                .Where(x => x.Embedding != null
-                            && x.Embedding.CosineDistance(queryVector) <= 1f - query.Threshold)
-                .CountAsync(ct);
-        }
+        // ── 키워드 → 임베딩 ────────────────────────────────────
+        var (embedding, failure) = await TryEmbedAsync(keyword, ct);
+        if (embedding is null)
+            throw new BuddhamException(failure?.Code ?? RsCode.Error, "검색 서비스를 일시적으로 사용할 수 없습니다.");
 
-        // ── 3단계: 유사도 정렬 + Offset 기반 페이징 ─────────────────────────
-        // [설계 이유] 벡터 유사도는 score 값이 실수(float)라 CreatedAt처럼
-        // "다음 기준점"을 커서에 담기 애매함. Score 기반 커서를 쓰면 동점 처리가
-        // 복잡해지므로, 안정성을 위해 Offset 에뮬레이션 방식을 채택.
-        var rawItems = await context.Guides.AsNoTracking()
-            .Where(x => x.Embedding!.CosineDistance(queryVector) <= (1f -
-                                                                     query.Threshold))
-            // 유사도 높은 순 (코사인 거리 오름차순 = 유사도 내림차순)
+        var queryVector = new Pgvector.Vector(embedding);
+        var maxDistance = 1f - query.Threshold;
+
+        var matched = ActiveGuides.AsNoTracking()
+            .Where(x => x.Embedding != null && x.Embedding.CosineDistance(queryVector) <= maxDistance);
+
+        // 첫 페이지에서만 전체 개수 계산
+        int? totalCount = offset == 0 ? await matched.CountAsync(ct) : null;
+
+        // 코사인 거리 오름차순 = 유사도 내림차순, 동점은 Id 로 안정 정렬
+        // 참고: HNSW 인덱스는 기본 hnsw.ef_search(40) 개 후보만 반환한다.
+        // 데이터가 많아지면 hnsw.ef_search 상향 또는 pgvector 0.8+ iterative scan 을 검토한다.
+        var items = await matched
             .OrderBy(x => x.Embedding!.CosineDistance(queryVector))
-            // 동점(동일 유사도) 시 Id로 보조 정렬 → 결과 안정성 보장
             .ThenBy(x => x.Id)
-            .Skip(currentOffset)
-            .Take(query.Size + 1) // 다음 페이지 존재 여부 판정용 + 1
+            .Skip(offset)
+            .Take(query.Size + 1)
+            .AsSummary()
             .ToListAsync(ct);
 
-        // ── 4단계: 다음 페이지 판정 ──────────────────────────────────────────
-        var hasMore = rawItems.Count > query.Size;
+        var nextOffset = offset + query.Size;
+        var hasMore = items.Count > query.Size && nextOffset < MaxSemanticOffset;
 
-        // 🔴 버그 지점: 현재 페이지에 보여줄 데이터(0부터 Size만큼)를 가져와야 하는데,
-        // 오히려 현재 페이지 데이터를 건너뛰고(Skip) 다음 페이지 판정용 데이터(+1)만 남겼음.
-        // var pageItems = rawItems.Skip(query.Size).AsQueryable();
+        if (items.Count > query.Size)
+            items.RemoveAt(items.Count - 1);
 
-        // 🟢 수정 방향: Take(query.Size)를 하거나, rawItems의 앞에서부터 Size만큼 잘라야함.
-        var pageItems = rawItems.Take(query.Size).AsQueryable();
-        var mappedResponses = pageItems.AsSummary().ToList();
-        // ── 5단계: 다음 커서 발행 ────────────────────────────────────────────
-        string? nextCursor = null;
-        if (!hasMore || mappedResponses.Count <= 0)
-            return CursorPagedResult<GuideSchema.Response>.Success(
-                mappedResponses,
-                nextCursor,
-                hasMore,
-                totalCount,
-                "백터 유사도 검색 목록을 전홋ㅇ했습니다."
-            );
-
-        var nextOffset = currentOffset + query.Size;
-        nextCursor = CursorToken.CreateVectorToken(nextOffset, keyword);
+        var nextCursor = hasMore
+            ? CursorToken.CreateVectorToken(nextOffset, keyword, query.Threshold)
+            : null;
 
         return CursorPagedResult<GuideSchema.Response>.Success(
-            mappedResponses,
-            nextCursor,
-            hasMore,
-            totalCount,
-            "백터 유사도 검색 목록을 전송했습니다."
-        );
+            items, nextCursor, hasMore, totalCount ?? 0, "벡터 유사도 검색 목록을 전송했습니다.");
+    }
+
+    private static string? NormalizeKeyword(string? keyword)
+        => string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
+
+    /// <summary>
+    /// 정규화(Trim)된 키워드를 받는다. 길이 초과 시 BadRequest.
+    /// </summary>
+    private static IQueryable<Guide> ApplyKeyword(IQueryable<Guide> query, string? keyword)
+    {
+        if (keyword is null)
+            return query;
+
+        if (keyword.Length > AppInfrastructure.MaxKeywordLength)
+            throw new BuddhamException(RsCode.BadRequest,
+                $"검색어는 {AppInfrastructure.MaxKeywordLength}자 이하여야 합니다.");
+
+        var pattern = "%" + keyword.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+
+        return query.Where(x =>
+            EF.Functions.ILike(x.Title, pattern) ||
+            EF.Functions.ILike(x.Content, pattern));
+    }
+
+    private static IQueryable<Guide> ApplySort(IQueryable<Guide> query, string? sortBy, bool descending)
+    {
+        return (sortBy?.Trim().ToLowerInvariant(), descending) switch
+        {
+            ("title", true) => query.OrderByDescending(x => x.Title).ThenByDescending(x => x.Id),
+            ("title", false) => query.OrderBy(x => x.Title).ThenBy(x => x.Id),
+            ("id", true) => query.OrderByDescending(x => x.Id),
+            ("id", false) => query.OrderBy(x => x.Id),
+            (_, false) => query.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+        };
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // 검증 / 임베딩
+    // ══════════════════════════════════════════════════════════
+
+    private static Result? ValidateRequest(GuideSchema.Request? request)
+    {
+        if (request is null)
+            return Result.Failure(RsCode.BadRequest, "요청 본문이 비어 있습니다.");
+
+        var errors = new Dictionary<string, string[]>();
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+            errors["title"] = ["제목은 필수입니다."];
+        else if (request.Title.Trim().Length > AppInfrastructure.MaxTitleLength)
+            errors["title"] = [$"제목은 {AppInfrastructure.MaxTitleLength}자 이하여야 합니다."];
+
+        if (string.IsNullOrWhiteSpace(request.Content))
+            errors["content"] = ["본문은 필수입니다."];
+        else if (request.Content.Length > MaxContentLength)
+            errors["content"] = [$"본문은 {MaxContentLength}자 이하여야 합니다."];
+
+        if (!Enum.IsDefined(request.GuideCategory))
+            errors["guideCategory"] = ["유효하지 않은 카테고리입니다."];
+
+        return errors.Count == 0 ? null : Result.ValidationFailed(errors);
     }
 
     /// <summary>
-    /// 기존 CreatedAt + Id 커서 방식 (SearchKeyword 없을 때)
+    /// 임베딩 생성 표준 진입점. 반환값은 항상 (vector != null) 또는 (failure != null) 중 하나다.
     /// </summary>
-    private async Task<CursorPagedResult<GuideSchema.Response>> HandleCursorPagedAsync(
-        SemanticSearchQuery query,
-        CancellationToken ct)
+    private async Task<(float[]? Vector, Result? Failure)> TryEmbedAsync(string text, CancellationToken ct)
     {
-        var baseQuery = context.Guides.AsNoTracking();
+        var (vector, failure) = await embeddingService.GenerateAsync(text, ct);
 
-        var totalCount = 0;
-        if (string.IsNullOrWhiteSpace(query.Cursor))
-            totalCount = await baseQuery.CountAsync(ct);
-
-        if (!string.IsNullOrWhiteSpace(query.Cursor))
+        if (failure is not null)
         {
-            var (cursorTicks, cursorId) = CursorToken.ParseToken(query.Cursor);
-            if (cursorTicks > 0 && cursorId != 0)
-            {
-                var cursorDateTime = new DateTime(cursorTicks, DateTimeKind.Utc);
-                baseQuery = baseQuery.Where(x =>
-                    x.CreatedAt < cursorDateTime ||
-                    (x.CreatedAt == cursorDateTime && x.Id > cursorId));
-            }
+            logger.LogWarning("{Entity} embedding generation failed: {Code}", EntityName, failure.Code);
+            return (null, failure);
         }
 
-        var rawItems = await baseQuery
-            .OrderByDescending(x => x.CreatedAt)
-            .ThenByDescending(x => x.Id)
-            .Take(query.Size + 1)
-            .ToListAsync(ct);
-
-        var hasMore = rawItems.Count > query.Size;
-        var pageItems = rawItems.Take(query.Size).AsQueryable();
-        var mappedResponses = pageItems.AsSummary().ToList();
-
-        string? nextCursor = null;
-        if (!hasMore || mappedResponses.Count <= 0)
-            return CursorPagedResult<GuideSchema.Response>.Success(
-                mappedResponses,
-                nextCursor,
-                hasMore,
-                totalCount,
-                "커서 목록을 전송했습니다.");
-
-        var lastItem = pageItems.Last();
-        nextCursor = CursorToken.CreateToken(lastItem.CreatedAt, lastItem.Id);
-
-        return CursorPagedResult<GuideSchema.Response>.Success(
-            mappedResponses,
-            nextCursor,
-            hasMore,
-            totalCount,
-            "커서 목록을 전송했습니다.");
+        return vector is null
+            ? (null, Result.Failure(RsCode.Error, "임베딩 생성에 실패했습니다."))
+            : (vector, null);
     }
 
-    private static string SummarizeForEmbedding(GuideSchema.Request request)
+    private static string SummarizeForEmbedding(string? title, string? content)
     {
-        var title = request.Title;
-        var content = request.Content;
+        var body = (content ?? string.Empty).Trim();
 
-        // 텍스트 조합 전략은 벡터DB에 저장할 텍스트를 어떻게 구성할지에 대한 계획입니다.
-        // 오늘의 법문과 같은 경우, 제목,
-        // 본문 앞부분을 조합하여 하나의 텍스트로 만드는 전략을 사용합니다. 이렇게 하면,
-        // 검색 시에 제목과 요약이 중요한 역할을 하면서도, 본문의 핵심 내용도 포함되어 검색의 정확도를 높일 수 있습니다.
-        // 특히, 긴 본문에서 앞부분을 선택하는 이유는 일반적으로 중요한 정보가 앞부분에 위치하는 경우가 많기 때문입니다.
-        // 또한, 벡터DB의 토큰 제한(예: 1024 토큰)을 고려하여 텍스트를 최적화하는 것이 중요합니다.
-        return $"""
-                제목: {title}
-                본문: {content[..Math.Min(content.Length, 500)]}
-                """;
+        if (body.Length > AppInfrastructure.EmbeddingContentChars)
+        {
+            body = body[..AppInfrastructure.EmbeddingContentChars];
+            // 서러게이트 쌍이 중간에서 잘리는 것을 방지
+            if (body.Length > 0 && char.IsHighSurrogate(body[^1])) body = body[..^1];
+        }
+
+        return $"제목: {(title ?? string.Empty).Trim()}\n본문: {body}";
     }
 }

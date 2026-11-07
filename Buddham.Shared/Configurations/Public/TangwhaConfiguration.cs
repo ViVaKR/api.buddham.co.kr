@@ -10,7 +10,7 @@ public class TangwhaConfiguration : IEntityTypeConfiguration<Tangwha>, IPublicCo
 {
     public void Configure(EntityTypeBuilder<Tangwha> builder)
     {
-        builder.ToTable("tangwahs", SchemaTypes.Public);
+        builder.ToTable("tangwhas", SchemaTypes.Public);
         builder.HasKey(x => x.Id);
 
         // ── 기본 컬럼 ────────────────────────────────
@@ -31,6 +31,11 @@ public class TangwhaConfiguration : IEntityTypeConfiguration<Tangwha>, IPublicCo
             .ValueGeneratedOnAddOrUpdate()
             // EF가 이 프로퍼티를 저장 페이로드에서 아예 제외
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+
+        // ── vector ──────────────────────────────────
+        builder.Property(x => x.Embedding)
+            .HasColumnType("vector(1024)")
+            .HasConversion(EfConverters.VectorConverter);
 
         // ── index ──────────────────────────────────
         builder.HasIndex(x => new { x.CreatedAt, x.Id })

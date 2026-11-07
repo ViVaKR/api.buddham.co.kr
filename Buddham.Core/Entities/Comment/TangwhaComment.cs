@@ -6,14 +6,14 @@ namespace Buddham.Core.Entities.Comment;
 
 public class TangwhaComment : CommentBase, ICommentTarget
 {
-    public long GuideId { get; set; }
+    public long TangwhaId { get; set; }
     public long TargetId
     {
-        get => GuideId;
-        set => GuideId = value;
+        get => TangwhaId;
+        set => TangwhaId = value;
     }
 
-    public static string TargetColumnPropertyName => nameof(GuideId);
+    public static string TargetColumnPropertyName => nameof(TangwhaId);
 
     public virtual Tangwha Tangwha { get; set; } = null!;
     public virtual ICollection<TangwhaComment> Replies { get; set; } = [];

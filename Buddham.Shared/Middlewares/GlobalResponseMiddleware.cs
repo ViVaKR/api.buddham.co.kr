@@ -41,14 +41,6 @@ public class GlobalResponseMiddleware(
             {
                 return;
             }
-            // if (context.Response.StatusCode == StatusCodes.Status404NotFound &&
-            //     IsReadMethod(context.Request.Method) &&
-            //     context.Request.Path.StartsWithSegments(ApiRoutes.Files.Avatars)
-            //    )
-            // {
-            //     await HandleDefaultAvatarAsync(context);
-            //     return;
-            // }
 
             // 상태코드 -> Result<T> 표준화
             if (context.Response.StatusCode is
@@ -67,17 +59,7 @@ public class GlobalResponseMiddleware(
         }
     }
 
-    private static bool IsReadMethod(string method) =>
-    HttpMethods.IsGet(method) || HttpMethods.IsHead(method);
-
-    // private async Task HandleDefaultAvatarAsync(HttpContext context)
-    // {
-    //     context.Response.StatusCode = StatusCodes.Status200OK;
-    //     context.Response.ContentType = "image/png";
-    //     var path = Path.Combine(env.ContentRootPath, "Avatars", "buddha.png");
-    //     await context.Response.SendFileAsync(path);
-    // }
-
+    private static bool IsReadMethod(string method) => HttpMethods.IsGet(method) || HttpMethods.IsHead(method);
 
     private async Task<bool> TryWriteDefaultAvatarAsync(HttpContext context)
     {
@@ -137,7 +119,7 @@ public class GlobalResponseMiddleware(
         };
         var devDetail = env.IsDevelopment() ? $" [{ex.Message}]" : string.Empty;
         logger.LogError(ex, "[{TraceId}] 에러발생: {Message}", context.TraceIdentifier, message);
-        context.Response.ContentType = ContentTypes.Json; //  "application/json";
+        context.Response.ContentType = ContentTypes.Json;
         context.Response.StatusCode = (int)code;
 
         var result = Result<object>.Failure(code, message + devDetail).WithTraceId(context.TraceIdentifier);

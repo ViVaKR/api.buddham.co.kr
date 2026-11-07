@@ -20,7 +20,7 @@ dotnet ef database update -p Buddham.Migrations -s Buddham.Api -c Buddham.Shared
 
 kubectl port-forward svc/buddham-postgres-svc 5432:5432 -n buddham
 
-dotnet ef migrations add RemoveAttechment -p Buddham.Migrations -s Buddham.Api -c Buddham.Shared.Data.PublicDbContext -o Data/Api/Public
+dotnet ef migrations add AddTAngwhaComments -p Buddham.Migrations -s Buddham.Api -c Buddham.Shared.Data.PublicDbContext -o Data/Api/Public
 
 dotnet ef database update -p Buddham.Migrations -s Buddham.Api -c PublicDbContext
 
