@@ -41,18 +41,20 @@ public static class MiddlewareExtensions
         return app;
     }
 
+    /// <summary>
+    /// 로그서비스
+    /// </summary>
+    /// <param name="next"></param>
     public class AuditLogMiddleware(RequestDelegate next)
     {
         // 로깅 제외할 경로
         private static readonly string[] ExcludePaths =
         [
+            "/healthz",
             "/health",
             "/favicon.ico",
             "/swagger",
             "/metrics",
-            "/ChatHub",
-            "/AiChatHub",
-            "hubs"
         ];
 
         public async Task InvokeAsync(HttpContext context, IAuditLogService auditLog, ILogger<AuditLogMiddleware> logger)
@@ -116,17 +118,10 @@ public static class MiddlewareExtensions
                         newValue: newValueJson,
                         isSuccess: isSuccess
                     );
-                    // Console.WriteLine($"[AuditLog] ✅ 저장 완료 → {actionType} / {category}");
-                    // ✅ 세련된 백엔드 로거로 출력!
-#pragma warning disable CA1873 // 비용이 많이 드는 로깅을 피하세요
                     logger.LogInformation("[AuditLog] 저장 완료 → {ActionType} / {Category}", actionType, category);
-#pragma warning restore CA1873 // 비용이 많이 드는 로깅을 피하세요
                 }
                 catch (Exception ex) // 👈 핵심! 예외 내용 보기
                 {
-                    // Console.WriteLine($"[AuditLog] ❌ 저장 실패 → {ex.GetType().Name}: {ex.Message}");
-                    // Console.WriteLine($"[AuditLog] StackTrace → {ex.StackTrace}");
-                    // ✅ 에러도 예쁘게 구조화된 로그로 남기기!
                     logger.LogError(ex, "[AuditLog] ❌ 저장 실패 → {ErrorType}: {ErrorMessage}", ex.GetType().Name, ex.Message);
                 }
             });
@@ -138,11 +133,8 @@ public static class MiddlewareExtensions
             var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(forwarded))
             {
-                // 여러 IP가 콤마로 올 수 있음 → 첫 번째가 원본 클라이언트
-                // "1.2.3.4, 172.22.0.1" → "1.2.3.4"
                 var clientIp = forwarded.Split(',')[0].Trim();
-                if (!string.IsNullOrWhiteSpace(clientIp))
-                    return clientIp;
+                if (!string.IsNullOrWhiteSpace(clientIp)) return clientIp;
             }
 
             // 2순위: X-Real-IP (Nginx 설정에 따라)
@@ -179,11 +171,17 @@ public static class MiddlewareExtensions
         // 경로에서 Category 추출
         private static string GetCategory(PathString path)
         {
+
             var p = path.Value?.ToLower() ?? "";
             if (p.Contains("auth")) return AuditCategories.Auth;
             if (p.Contains("account")) return AuditCategories.Account;
             return p.Contains("email") ? AuditCategories.Email : AuditCategories.System;
         }
+
+        // private static str
+        private static string Truncate(string value, int max)
+            => value.Length <= max ? value : value[..max];
+
     }
 
     public static IApplicationBuilder UseAuditLog(this IApplicationBuilder app) => app.UseMiddleware<AuditLogMiddleware>();

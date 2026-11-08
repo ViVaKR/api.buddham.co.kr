@@ -38,7 +38,7 @@ public class AuthService(
     // ══════════════════════════════════════════
 
     /// <summary>
-    ///     SignIn
+    /// SignIn
     /// </summary>
     public async Task<Result<AuthSchema.Identity>> SignInAsync(AuthSchema.SignIn dto)
     {

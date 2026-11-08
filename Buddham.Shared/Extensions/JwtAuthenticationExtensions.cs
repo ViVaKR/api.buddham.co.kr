@@ -13,15 +13,8 @@ public static class JwtAuthenticationExtensions
     /// <summary>
     /// JWT Authentication
     /// </summary>
-    public static IServiceCollection AddJwtAuthentication(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        // services.AddOptions<JwtOptions>()
-        //     .Bind(configuration.GetSection(JwtOptions.SectionName))
-        //     .ValidateDataAnnotations()
-        //     .ValidateOnStart();
-        //
         services.AddOptions<JwtOptions>()
             .Bind(configuration.GetSection(JwtOptions.SectionName))
             .Validate(o => Encoding.UTF8.GetByteCount(o.Key) >= 64,
@@ -58,12 +51,17 @@ public static class JwtAuthenticationExtensions
                     ValidateAudience = true,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
+
                     ClockSkew = TimeSpan.Zero,
+
                     ValidIssuer = jwtOptions.Issuer,
                     ValidAudience = jwtOptions.Audience,
+
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidAlgorithms = [SecurityAlgorithms.HmacSha512],
-                    NameClaimType = JwtRegisteredClaimNames.Sub
+                    // NameClaimType = JwtRegisteredClaimNames.Sub,
+                    NameClaimType = JwtRegisteredClaimNames.Name,
+                    RoleClaimType = "role"
                 };
                 x.Events = new JwtBearerEvents
                 {

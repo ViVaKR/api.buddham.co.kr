@@ -12,9 +12,7 @@ namespace Buddham.Api.Controllers.Public;
 [ApiController]
 [Route("[controller]")]
 [Authorize(Roles = "Admin")]
-public class GuideController(
-    IGuideService guideService
-) : BaseController
+public class GuideController(IGuideService guideService) : BaseController
 {
     /// <summary>
     /// GET LIST ALL (상한: MaxPageSize)

@@ -17,7 +17,7 @@ builder.Services.AddIndentityConfiguration();
 // * 3 JWT Authentication
 builder.Services.AddJwtAuthentication(builder.Configuration);
 
-// * 5. Ai & Vector
+// * 5. Ai Vector
 builder.Services.AddAiServices(builder.Configuration);
 
 // * 6 Business Logic
