@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $ImageName = "kimbumjun/buddham-api"
 
-$Tag = "v2.0.1"
+$Tag = "v2.0.5"
 
 Write-Host "▶ [1/3] 오직 ARM64 빌드..." -ForegroundColor Cyan
 

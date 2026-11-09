@@ -39,3 +39,13 @@ app.MapControllers();
 app.UseCommonHealthChecks();
 
 await app.RunAsync();
+
+// app.Use(async (context, next) =>
+// {
+//     app.Logger.LogInformation("Remote IP: {Ip}, XFF: {Xff}",
+//         context.Connection.RemoteIpAddress,
+//         context.Request.Headers["X-Forwarded-For"].ToString());
+//     await next();
+// });
+
+// 125.240.34.173

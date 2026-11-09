@@ -7,6 +7,7 @@ using Buddham.Core.Entities.Auth;
 using Buddham.Core.Interfaces.Auth;
 using Buddham.Shared.Constants;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.CodeAnalysis.Options;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -29,9 +30,6 @@ public class TokenService(
         // var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key));
         // var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512);
         var creds = new SigningCredentials(_signingKey, SecurityAlgorithms.HmacSha512);
-
-        var iss = options.Issuer;
-        var aud = options.Audience;
 
         var now = DateTimeOffset.UtcNow;
         var iat = now.ToUnixTimeSeconds().ToString();
@@ -58,6 +56,9 @@ public class TokenService(
         // ✅ 4) 역할 추가 (ClaimTypes.Role)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         var roles = await userManager.GetRolesAsync(user);
+
+        // (상수) const string ClaimTypes.Role
+        //         = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
         // claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         claims.AddRange(roles.Select(role => new Claim("role", role)));
@@ -87,14 +88,17 @@ public class TokenService(
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
-            Subject = new ClaimsIdentity(claims),
-            Issuer = iss,
-            Audience = aud,
+            // Subject = new ClaimsIdentity(claims), // 구버전
+
+            // 사용자/역할 클레임이 겹치면 토큰이 불필요하게 커지므로
+            // (Type, Value) 기준으로 중복 제거
+            Subject = new ClaimsIdentity(claims.DistinctBy(x => (x.Type, x.Value))),
+            Issuer = options.Issuer,
+            Audience = options.Audience,
             NotBefore = now.UtcDateTime,
             Expires = expiry.UtcDateTime,
             SigningCredentials = creds
         };
-
 
         // 7) 토큰 생성/직렬화
         var handler = new JwtSecurityTokenHandler();
@@ -103,30 +107,60 @@ public class TokenService(
     }
 
     // --> (Get Principal From Expired Token) 만료된 토큰에서 클레임 추출
+    // 실패(위조/형식 오류/알고리즘 불일치 등)하면 예외 대신 null 을 반환한다.
+    // (이전에는 예외가 그대로 올라가 잘못된 토큰이 500 으로 처리되었다)
     public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
     {
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var principal = tokenHandler.ValidateToken(token, new TokenValidationParameters
+        var parameters = new TokenValidationParameters
         {
-            ValidateAudience = false,
-            ValidateIssuer = false,
+            ValidateIssuer = true,
+            ValidIssuer = options.Issuer,
+            ValidateAudience = true,
+            ValidAudience = options.Audience,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key)),
-            ValidateLifetime = false,
+            IssuerSigningKey = _signingKey,
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha512],
+            ValidateLifetime = false, // 만료된 토큰만 허용 하는 용도
             RoleClaimType = "role"
-        }, out var securityToken);
+        };
 
-        if (securityToken is not JwtSecurityToken jwtSecurityToken ||
-            !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha512,
-                StringComparison.InvariantCultureIgnoreCase))
+        try
         {
-            throw new SecurityTokenException("잘못된 토큰입니다.");
+            var principal = new JwtSecurityTokenHandler()
+                .ValidateToken(token, parameters, out var securityToken);
+            return securityToken is JwtSecurityToken jwt &&
+                jwt.Header.Alg.Equals(SecurityAlgorithms.HmacSha512, StringComparison.OrdinalIgnoreCase)
+                ? principal
+                : null;
+        }
+        catch (Exception ex) when (ex is SecurityTokenException or ArgumentException)
+        {
+            return null;
         }
 
-        return principal;
+        // -- old version -- //
+        // var tokenHandler = new JwtSecurityTokenHandler();
+        // var principal = tokenHandler.ValidateToken(token, new TokenValidationParameters
+        // {
+        //     ValidateAudience = false,
+        //     ValidateIssuer = false,
+        //     ValidateIssuerSigningKey = true,
+        //     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key)),
+        //     ValidateLifetime = false,
+        //     RoleClaimType = "role"
+        // }, out var securityToken);
+
+        // if (securityToken is not JwtSecurityToken jwtSecurityToken ||
+        //     !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha512,
+        //         StringComparison.InvariantCultureIgnoreCase))
+        // {
+        //     throw new SecurityTokenException("잘못된 토큰입니다.");
+        // }
+
+        // return principal;
     }
 
-    // --> (Create Refresh Token) 리프레시 토큰 생성
+    // --> (Create Refresh Token) 리프레시 토큰 생성 (DB 에는 해시만 저장: AuthService)
     public string GenerateRefreshToken()
         => Convert.ToHexString(RandomNumberGenerator.GetBytes(86));
 }

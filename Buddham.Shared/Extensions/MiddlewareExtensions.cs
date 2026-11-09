@@ -15,7 +15,7 @@ public static class MiddlewareExtensions
 {
     public static IApplicationBuilder UseBuddhamMiddlewares(this IApplicationBuilder app)
     {
-        // app.UseResponseCompression();
+        app.UseForwardedHeaders(); // 0 순위
         app.UseMiddleware<GlobalResponseMiddleware>(); // 1 순위
         app.UseExceptionHandler(); // 2 순위
         app.UseDefaultFiles();
@@ -42,12 +42,10 @@ public static class MiddlewareExtensions
     }
 
     /// <summary>
-    /// 로그서비스
+    /// 로그 서비스
     /// </summary>
-    /// <param name="next"></param>
     public class AuditLogMiddleware(RequestDelegate next)
     {
-        // 로깅 제외할 경로
         private static readonly string[] ExcludePaths =
         [
             "/healthz",
@@ -59,8 +57,7 @@ public static class MiddlewareExtensions
 
         public async Task InvokeAsync(HttpContext context, IAuditLogService auditLog, ILogger<AuditLogMiddleware> logger)
         {
-            var publicIp = GetClientIp(context);
-
+            var publicIp = context.GetClientIp();
             var path = context.Request.Path.Value ?? "";
             if (ExcludePaths.Any(p => path.StartsWith(p)))
             {
@@ -127,29 +124,6 @@ public static class MiddlewareExtensions
             });
         }
 
-        private static string? GetClientIp(HttpContext context)
-        {
-            // 1순위: X-Forwarded-For (Nginx/Traefik이 넣어주는 실제 클라이언트 IP)
-            var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(forwarded))
-            {
-                var clientIp = forwarded.Split(',')[0].Trim();
-                if (!string.IsNullOrWhiteSpace(clientIp)) return clientIp;
-            }
-
-            // 2순위: X-Real-IP (Nginx 설정에 따라)
-            var realIp = context.Request.Headers["X-Real-IP"].FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(realIp))
-                return realIp;
-
-            // 3순위: RemoteIpAddress (직접 연결 또는 로컬 테스트)
-            var remote = context.Connection.RemoteIpAddress;
-            if (remote is null) return null;
-
-            // ::ffff:1.2.3.4 → 1.2.3.4 변환
-            return remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4().ToString() : remote.ToString();
-        }
-
         // 경로에서 ActionType 추출
         private static string GetActionType(string method, PathString path)
         {
@@ -162,13 +136,10 @@ public static class MiddlewareExtensions
                 ("PUT", var x) when x.Contains("change-password") => AuditActions.ChangePassword,
                 ("DELETE", _) => AuditActions.DeleteUser,
                 ("PUT", _) => AuditActions.UpdateUser,
-                // ✅ 경로에서 첫 번째 세그먼트만 추출 → "GET:User" 형태로 50자 이내 보장
                 _ => $"{method}:{path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Root"}"
-                //  _ => $"{method}:{path.Value?.Split('/').FirstOrDefault(s => !string.IsNullOrEmpty(s)) ?? "Unknown"}"
             };
         }
 
-        // 경로에서 Category 추출
         private static string GetCategory(PathString path)
         {
 
@@ -178,7 +149,6 @@ public static class MiddlewareExtensions
             return p.Contains("email") ? AuditCategories.Email : AuditCategories.System;
         }
 
-        // private static str
         private static string Truncate(string value, int max)
             => value.Length <= max ? value : value[..max];
 

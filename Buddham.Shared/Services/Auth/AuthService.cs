@@ -255,8 +255,8 @@ public class AuthService(
 
             try
             {
-                var bgUser = await bgUserManager.FindByIdAsync(userId.ToString());
-                if (bgUser is null) throw new Exception("백그라운드 작업에서 사용자를 찾을 수 없습니다.");
+                var bgUser = await bgUserManager.FindByIdAsync(userId.ToString())
+                    ?? throw new Exception("백그라운드 작업에서 사용자를 찾을 수 없습니다.");
 
                 var confirmationLink = $"{_buddhamAppSettings.FrontendUrl}/MemberShip/ConfirmEmailReply" +
                                        $"?email={Uri.EscapeDataString(user.Email!)}" +

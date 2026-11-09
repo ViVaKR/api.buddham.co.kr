@@ -45,6 +45,7 @@ public static class JwtAuthenticationExtensions
             {
                 x.SaveToken = true;
                 x.RequireHttpsMetadata = false;
+                // x.MapInboundClaims = false; // 추가 함
                 x.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -59,25 +60,24 @@ public static class JwtAuthenticationExtensions
 
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidAlgorithms = [SecurityAlgorithms.HmacSha512],
-                    // NameClaimType = JwtRegisteredClaimNames.Sub,
-                    NameClaimType = JwtRegisteredClaimNames.Name,
-                    RoleClaimType = "role"
+                    NameClaimType = JwtRegisteredClaimNames.Sub,
+                    // NameClaimType = JwtRegisteredClaimNames.Name,
+                    // RoleClaimType = "role"
                 };
-                x.Events = new JwtBearerEvents
-                {
-                    OnMessageReceived = context =>
-                    {
-                        var path = context.HttpContext.Request.Path;
-                        if (path.StartsWithSegments("/ChatHub"))
-                        {
-                            var accessToken = context.Request.Query["access_token"];
-                            if (!string.IsNullOrEmpty(accessToken))
-                                context.Token = accessToken;
-                        }
-
-                        return Task.CompletedTask;
-                    }
-                };
+                // x.Events = new JwtBearerEvents
+                // {
+                //     OnMessageReceived = context =>
+                //     {
+                //         var path = context.HttpContext.Request.Path;
+                //         if (path.StartsWithSegments("/ChatHub"))
+                //         {
+                //             var accessToken = context.Request.Query["access_token"];
+                //             if (!string.IsNullOrEmpty(accessToken))
+                //                 context.Token = accessToken;
+                //         }
+                //         return Task.CompletedTask;
+                //     }
+                // };
             });
 
         return services;

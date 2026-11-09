@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using Buddham.Core.Common.Options;
 using Buddham.Core.Entities.Auth;
 using Buddham.Core.Entities.Comment;
@@ -26,9 +27,10 @@ using Buddham.Shared.Services.Public;
 using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
@@ -88,6 +90,19 @@ public static class ServiceCollectionExtensions
             options.MemoryBufferThreshold = 2 * 1024 * 1024;
         });
 
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders =
+                ForwardedHeaders.XForwardedFor |
+                ForwardedHeaders.XForwardedProto;
+
+            options.ForwardLimit = 1;
+
+            // Nginx 프록시 네트워크
+            options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("192.168.0.0/24"));
+            options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.244.0.0/16"));
+        });
+
         services.AddHttpClient();
         services.AddHttpContextAccessor();
 
@@ -96,11 +111,17 @@ public static class ServiceCollectionExtensions
         // 처리율 제한 (Tate Limiting)
         services.AddRateLimiter(options =>
         {
-            options.AddFixedWindowLimiter("email", opt =>
-            {
-                opt.Window = TimeSpan.FromMinutes(1);
-                opt.PermitLimit = 3;
-            });
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddPolicy("email", httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString()
+                        ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        Window = TimeSpan.FromMinutes(1),
+                        PermitLimit = 3,
+                        QueueLimit = 0
+                    }));
         });
 
         return services;
@@ -250,9 +271,6 @@ public static class ServiceCollectionExtensions
         // ================== [개별댓글 서비스] ==================
         services.AddScoped(sp => new GenericCommentService<GuideComment, GuideCommentLike>(sp.GetRequiredService<PublicDbContext>()));
         services.AddScoped(x => new GenericCommentService<TangwhaComment, TangwhaCommentLike>(x.GetRequiredService<PublicDbContext>()));
-
-
-
         return services;
     }
 

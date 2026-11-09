@@ -6,4 +6,7 @@
     <UseArtifactsOutput>true</UseArtifactsOutput>
     <NoWarn>$(NoWarn);CS9113;CA1873</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory).globalconfig" />
+  </ItemGroup>
 </Project>
