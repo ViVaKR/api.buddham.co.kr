@@ -1,6 +1,7 @@
+using Buddham.Shared.Services.Scripture;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Buddham.Shared.Services.Scripture;
+namespace Buddham.Shared.Extensions;
 
 public static class ScriptureServiceCollectionExtensions
 {

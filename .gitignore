@@ -95,7 +95,7 @@ $RECYCLE.BIN/
 *~
 
 # --- 프로젝트별 선택 (로컬 전용으로 둘 폴더만 주석 해제) ---
-# /docs/
+docs/**/*
 # /scripts/
 # /backup/
 sql/

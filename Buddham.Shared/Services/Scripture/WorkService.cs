@@ -1,100 +1,151 @@
+using Buddham.Core.Common.Queries;
+using Buddham.Core.Common.Results;
 using Buddham.Core.Entities.Scriptures;
 using Buddham.Core.EnumTypes;
+using Buddham.Core.Interfaces.Cache;
+using Buddham.Core.Interfaces.Scripture;
 using Buddham.Core.Scriptures;
 using Buddham.Shared.Data;
+using Buddham.Shared.Extensions.Scripture;
 using Microsoft.EntityFrameworkCore;
+using Schema = Buddham.Core.Schemas.ScriptureSchema;
 
 namespace Buddham.Shared.Services.Scripture;
 
-public sealed record WorkInput(
-    long CollectionId, long? GroupId, string Code,
-    string TitleKo, string? TitleOriginal, string? TitleRoman,
-    WorkKind Kind, TextLayer Layer, AttributionKind Attribution, string? AttributionNote,
-    long? SpeakerId, long? CommentaryOfWorkId, string? Summary, int SortOrder);
-
-public sealed record IdentifierInput(string Scheme, string Value, bool IsPrimary = false);
-
-public sealed record WorkMatch(long WorkId, long CollectionId, string Code, string TitleKo, string Scheme, string Value);
-
-public sealed record WorkDetail(
-    long Id, long CollectionId, long? GroupId, string Code, string TitleKo, string? TitleOriginal, string? TitleRoman,
-    string? Summary, IReadOnlyList<WorkDetail.IdentifierView> Identifiers, IReadOnlyList<WorkDetail.EditionView> Editions)
-{
-    public sealed record IdentifierView(long Id, string Scheme, string Value, bool IsPrimary);
-    public sealed record EditionView(long Id, string LanguageCode, string? Script, EditionKind Kind, string? Revision,
-        EditionStatus Status, int SegmentCount, string? TranslatorName);
-}
-
 /// <summary>
 /// 경 = 추상적 작품 단위. 실제 원문은 Edition/Segment 에 있고, 여기서는 위치·층위·귀속·식별자를 다룬다.
+/// 경이 늘거나 줄면 메뉴 트리의 경 수가 달라지므로 트리 캐시를 무효화한다.
 /// </summary>
-public sealed class WorkService(ScriptureDbContext db) : ScriptureServiceBase(db)
+public sealed class WorkService(ScriptureDbContext db, IRedisCacheService cache)
+    : ScriptureServiceBase(db, cache), IWorkService
 {
-    // ───────────────────────── 경 CRUD ─────────────────────────
+    // ═════════════════════ 조회 ═════════════════════
 
-    public async Task<CanonWork> CreateAsync(WorkInput i, IReadOnlyList<IdentifierInput>? identifiers, CancellationToken ct)
+    public Task<OffsetPagedResult<Schema.Work.Response>> GetWorksAsync(
+        long? collectionId, long? groupId, OffsetPagedQuery query, CancellationToken ct)
+        => ScriptureResults.RunOffsetAsync(async () =>
+        {
+            var q = Db.Set<CanonWork>().AsNoTracking().Alive();
+            if (collectionId is { } cid) q = q.Where(x => x.CollectionId == cid);
+            if (groupId is { } gid) q = q.Where(x => x.GroupId == gid);
+
+            if (ScriptureText.Blank(query.SearchKeyword) is { } keyword)
+            {
+                var pattern = "%" + ScriptureText.EscapeLike(keyword) + "%";
+                q = q.Where(x => EF.Functions.ILike(x.TitleKo, pattern)
+                                 || EF.Functions.ILike(x.Code, pattern)
+                                 || (x.TitleRoman != null && EF.Functions.ILike(x.TitleRoman, pattern))
+                                 || (x.TitleOriginal != null && EF.Functions.ILike(x.TitleOriginal, pattern)));
+            }
+
+            var total = await q.CountAsync(ct);
+
+            // SortBy 가 없으면 읽는 순서(SortOrder 오름차순). OffsetPagedQuery.Descending 의 기본값(true)은 정렬 기준을 명시했을 때만 적용한다.
+            var ordered = (query.SortBy?.Trim().ToLowerInvariant()) switch
+            {
+                "code" => query.Descending ? q.OrderByDescending(x => x.Code) : q.OrderBy(x => x.Code),
+                "title" => query.Descending ? q.OrderByDescending(x => x.TitleKo) : q.OrderBy(x => x.TitleKo),
+                "createdat" => query.Descending ? q.OrderByDescending(x => x.CreatedAt) : q.OrderBy(x => x.CreatedAt),
+                _ => q.OrderBy(x => x.SortOrder).ThenBy(x => x.Id),
+            };
+
+            var items = await ordered
+                .Skip((query.PageNumber - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .AsResponse()
+                .ToListAsync(ct);
+
+            return OffsetPagedResult<Schema.Work.Response>.Success(items, total, query.PageNumber, query.PageSize);
+        });
+
+    public Task<Result<Schema.Work.Detail>> GetDetailAsync(long id, bool includeUnpublishedEditions, CancellationToken ct)
+        => ScriptureResults.RunAsync(() => ReadDetailAsync(id, includeUnpublishedEditions, ct));
+
+    private async Task<Schema.Work.Detail> ReadDetailAsync(long id, bool includeUnpublishedEditions, CancellationToken ct)
+        => await Db.Set<CanonWork>().AsNoTracking().Alive()
+               .Where(x => x.Id == id)
+               .AsDetail(includeUnpublishedEditions)
+               .FirstOrDefaultAsync(ct)
+           ?? throw Rule.NotFound("경", id);
+
+    // ═════════════════════ 경 CRUD ═════════════════════
+
+    public Task<Result<Schema.Work.Detail>> CreateAsync(Schema.Work.Request r, CancellationToken ct)
+        => ScriptureResults.RunAsync(async () =>
+        {
+            await ValidateAsync(null, r, ct);
+
+            var prepared = PrepareIdentifiers(r.Identifiers);
+            await EnsureIdentifiersFreeAsync(prepared, excludeWorkId: null, ct);
+
+            var e = new CanonWork();
+            Apply(e, r);
+            Db.Add(e);
+
+            foreach (var id in prepared)
+                Db.Add(new CanonWorkIdentifier { Work = e, Scheme = id.Scheme, Value = id.Value, IsPrimary = id.IsPrimary });
+
+            await SaveAsync(ct);
+            await InvalidateAsync(ScriptureCacheKeys.Tree);
+            return await ReadDetailAsync(e.Id, includeUnpublishedEditions: true, ct);
+        }, created: true);
+
+    public Task<Result<Schema.Work.Detail>> UpdateAsync(long id, Schema.Work.Request r, CancellationToken ct)
+        => ScriptureResults.RunAsync(async () =>
+        {
+            if (r.Identifiers is { Count: > 0 })
+                throw Rule.Invalid("식별자는 수정 요청으로 바꿀 수 없네. 식별자 전용 기능(추가·대표 지정·삭제)을 쓰게.");
+
+            var e = await FindAsync<CanonWork>(id, "경", ct);
+            await ValidateAsync(id, r, ct);
+            Apply(e, r);
+            Touch(e);
+            await SaveAsync(ct);
+            await InvalidateAsync(ScriptureCacheKeys.Tree);
+            return await ReadDetailAsync(id, includeUnpublishedEditions: true, ct);
+        });
+
+    public Task<Result> DeleteAsync(long id, CancellationToken ct)
+        => ScriptureResults.RunAsync(async () =>
+        {
+            var e = await FindAsync<CanonWork>(id, "경", ct);
+
+            if (await AnyAsync<CanonEdition>(x => x.WorkId == id, ct)) throw Rule.Conflict("판본이 있는 경은 지울 수 없네. 판본을 먼저 정리하게.");
+            if (await AnyAsync<CanonWork>(x => x.CommentaryOfWorkId == id, ct)) throw Rule.Conflict("이 경을 주석 대상으로 삼는 경이 있어 지울 수 없네.");
+            if (await AnyAsync<CanonParallel>(x => x.FromWorkId == id || x.ToWorkId == id, ct)) throw Rule.Conflict("병행경 관계가 걸려 있어 지울 수 없네.");
+
+            // 식별자는 경과 함께 지워야 (scheme, value) 유일 인덱스가 풀린다.
+            var identifiers = await Db.Set<CanonWorkIdentifier>().Alive().Where(x => x.WorkId == id).ToListAsync(ct);
+            foreach (var identifier in identifiers)
+            {
+                identifier.IsPrimary = false;
+                SoftDelete(identifier);
+            }
+
+            SoftDelete(e);
+            await SaveAsync(ct);
+            await InvalidateAsync(ScriptureCacheKeys.Tree);
+        });
+
+    private async Task ValidateAsync(long? selfId, Schema.Work.Request r, CancellationToken ct)
     {
-        await ValidateAsync(null, i, ct);
+        await EnsureExistsAsync<CanonCollection>(r.CollectionId, "집성", ct);
 
-        var prepared = PrepareIdentifiers(identifiers);
-        await EnsureIdentifiersFreeAsync(prepared, excludeWorkId: null, ct);
-
-        var e = new CanonWork();
-        Apply(e, i);
-        Db.Add(e);
-
-        foreach (var id in prepared)
-            Db.Add(new CanonWorkIdentifier { Work = e, Scheme = id.Scheme, Value = id.Value, IsPrimary = id.IsPrimary });
-
-        await SaveAsync(ct);
-        return e;
-    }
-
-    public async Task<CanonWork> UpdateAsync(long id, WorkInput i, CancellationToken ct)
-    {
-        var e = await FindAsync<CanonWork>(id, "경", ct);
-        await ValidateAsync(id, i, ct);
-        Apply(e, i);
-        Touch(e);
-        await SaveAsync(ct);
-        return e;
-    }
-
-    public async Task DeleteAsync(long id, CancellationToken ct)
-    {
-        var e = await FindAsync<CanonWork>(id, "경", ct);
-
-        if (await AnyAsync<CanonEdition>(x => x.WorkId == id, ct)) throw Rule.Conflict("판본이 있는 경은 지울 수 없네. 판본을 먼저 정리하게.");
-        if (await AnyAsync<CanonWork>(x => x.CommentaryOfWorkId == id, ct)) throw Rule.Conflict("이 경을 주석 대상으로 삼는 경이 있어 지울 수 없네.");
-        if (await AnyAsync<CanonParallel>(x => x.FromWorkId == id || x.ToWorkId == id, ct)) throw Rule.Conflict("병행경 관계가 걸려 있어 지울 수 없네.");
-
-        // 식별자는 경과 함께 지워야 (scheme, value) 유일 인덱스가 풀린다.
-        var identifiers = await Db.Set<CanonWorkIdentifier>().Alive().Where(x => x.WorkId == id).ToListAsync(ct);
-        foreach (var identifier in identifiers) SoftDelete(identifier);
-
-        SoftDelete(e);
-        await SaveAsync(ct);
-    }
-
-    private async Task ValidateAsync(long? selfId, WorkInput i, CancellationToken ct)
-    {
-        await EnsureExistsAsync<CanonCollection>(i.CollectionId, "집성", ct);
-
-        if (i.GroupId is { } gid)
+        if (r.GroupId is { } gid)
         {
             var group = await FindAsync<CanonGroup>(gid, "그룹", ct);
-            if (group.CollectionId != i.CollectionId) throw Rule.Invalid("그룹이 다른 집성에 속해 있네.");
+            if (group.CollectionId != r.CollectionId) throw Rule.Invalid("그룹이 다른 집성에 속해 있네.");
         }
 
-        if (i.SpeakerId is { } sid) await EnsureExistsAsync<CanonSpeaker>(sid, "화자", ct);
+        if (r.SpeakerId is { } sid) await EnsureExistsAsync<CanonSpeaker>(sid, "화자", ct);
 
         // 층위 규칙: Root 는 주석 대상이 없고, Commentary / SubCommentary 는 반드시 대상이 있다. Other 는 선택.
-        if (i.Layer == TextLayer.Root && i.CommentaryOfWorkId is not null)
+        if (r.Layer == TextLayer.Root && r.CommentaryOfWorkId is not null)
             throw Rule.Invalid("원전(Root) 층의 경에는 주석 대상을 둘 수 없네.");
-        if (i.Layer is TextLayer.Commentary or TextLayer.SubCommentary && i.CommentaryOfWorkId is null)
+        if (r.Layer is TextLayer.Commentary or TextLayer.SubCommentary && r.CommentaryOfWorkId is null)
             throw Rule.Invalid("주석·복주 층의 경에는 주석 대상이 필요하네.");
 
-        if (i.CommentaryOfWorkId is { } target)
+        if (r.CommentaryOfWorkId is { } target)
         {
             await EnsureExistsAsync<CanonWork>(target, "주석 대상 경", ct);
             if (selfId is { } me)
@@ -104,150 +155,138 @@ public sealed class WorkService(ScriptureDbContext db) : ScriptureServiceBase(db
             }
         }
 
-        var code = NormalizeCode(i.Code);
-        if (await AnyAsync<CanonWork>(x => x.CollectionId == i.CollectionId && x.Code == code && x.Id != (selfId ?? 0), ct))
+        var code = NormalizeCode(r.Code);
+        if (await AnyAsync<CanonWork>(x => x.CollectionId == r.CollectionId && x.Code == code && x.Id != (selfId ?? 0), ct))
             throw Rule.Conflict($"이 집성에 이미 '{code}' 코드의 경이 있네.");
     }
 
-    private static void Apply(CanonWork e, WorkInput i)
+    private static void Apply(CanonWork e, Schema.Work.Request r)
     {
-        e.CollectionId = i.CollectionId;
-        e.GroupId = i.GroupId;
-        e.Code = NormalizeCode(i.Code);
-        e.TitleKo = RequireText(i.TitleKo, "한글 제목", 500);
-        e.TitleOriginal = OptionalText(i.TitleOriginal, "원어 제목", 1000);
-        e.TitleRoman = OptionalText(i.TitleRoman, "로마자 제목", 500);
-        e.Kind = i.Kind;
-        e.Layer = i.Layer;
-        e.Attribution = i.Attribution;
-        e.AttributionNote = ScriptureText.Blank(i.AttributionNote);
-        e.SpeakerId = i.SpeakerId;
-        e.CommentaryOfWorkId = i.Layer == TextLayer.Root ? null : i.CommentaryOfWorkId;
-        e.Summary = ScriptureText.Blank(i.Summary);
-        e.SortOrder = i.SortOrder;
+        e.CollectionId = r.CollectionId;
+        e.GroupId = r.GroupId;
+        e.Code = NormalizeCode(r.Code);
+        e.TitleKo = RequireText(r.TitleKo, "한글 제목", 500);
+        e.TitleOriginal = OptionalText(r.TitleOriginal, "원어 제목", 1000);
+        e.TitleRoman = OptionalText(r.TitleRoman, "로마자 제목", 500);
+        e.Kind = r.Kind;
+        e.Layer = r.Layer;
+        e.Attribution = r.Attribution;
+        e.AttributionNote = ScriptureText.Blank(r.AttributionNote);
+        e.SpeakerId = r.SpeakerId;
+        e.CommentaryOfWorkId = r.Layer == TextLayer.Root ? null : r.CommentaryOfWorkId;
+        e.Summary = ScriptureText.Blank(r.Summary);
+        e.SortOrder = r.SortOrder;
     }
 
-    // ───────────────────────── 식별자 ─────────────────────────
+    // ═════════════════════ 식별자 ═════════════════════
     // 같은 경이 SN 12.2 / 잡아함 288 / T99 처럼 여러 번호를 갖는다. (scheme, value) 는 전체에서 유일, 경당 대표(primary)는 하나.
 
-    public async Task<CanonWorkIdentifier> AddIdentifierAsync(long workId, IdentifierInput input, CancellationToken ct)
-    {
-        await EnsureExistsAsync<CanonWork>(workId, "경", ct);
-
-        var prepared = PrepareIdentifiers([input with { IsPrimary = false }]);
-        await EnsureIdentifiersFreeAsync(prepared, excludeWorkId: workId, ct);
-        var item = prepared[0];
-
-        var hasPrimary = await AnyAsync<CanonWorkIdentifier>(x => x.WorkId == workId && x.IsPrimary, ct);
-        var wantsPrimary = input.IsPrimary || !hasPrimary; // 첫 식별자는 자동으로 대표
-
-        await using var tx = await Db.Database.BeginTransactionAsync(ct);
-
-        if (wantsPrimary && hasPrimary)
+    public Task<Result<Schema.Identifier.Response>> AddIdentifierAsync(long workId, Schema.Identifier.Request r, CancellationToken ct)
+        => ScriptureResults.RunAsync(async () =>
         {
+            await EnsureExistsAsync<CanonWork>(workId, "경", ct);
+
+            var prepared = PrepareIdentifiers([new Schema.Identifier.Request { Scheme = r.Scheme, Value = r.Value, IsPrimary = false }]);
+            await EnsureIdentifiersFreeAsync(prepared, excludeWorkId: workId, ct);
+            var item = prepared[0];
+
+            var hasPrimary = await AnyAsync<CanonWorkIdentifier>(x => x.WorkId == workId && x.IsPrimary, ct);
+            var wantsPrimary = r.IsPrimary || !hasPrimary; // 첫 식별자는 자동으로 대표
+
+            await using var tx = await Db.Database.BeginTransactionAsync(ct);
+
+            if (wantsPrimary && hasPrimary)
+            {
+                await Db.Set<CanonWorkIdentifier>().Alive()
+                    .Where(x => x.WorkId == workId && x.IsPrimary)
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPrimary, false), ct);
+            }
+
+            var e = new CanonWorkIdentifier { WorkId = workId, Scheme = item.Scheme, Value = item.Value, IsPrimary = wantsPrimary };
+            Db.Add(e);
+            await SaveAsync(ct);
+            await tx.CommitAsync(ct);
+
+            return await Db.Set<CanonWorkIdentifier>().AsNoTracking().Where(x => x.Id == e.Id).AsResponse().FirstAsync(ct);
+        }, created: true);
+
+    public Task<Result> SetPrimaryIdentifierAsync(long workId, long identifierId, CancellationToken ct)
+        => ScriptureResults.RunAsync(async () =>
+        {
+            var target = await Db.Set<CanonWorkIdentifier>().Alive()
+                .FirstOrDefaultAsync(x => x.Id == identifierId && x.WorkId == workId, ct)
+                ?? throw Rule.NotFound("식별자", identifierId);
+            if (target.IsPrimary) return;
+
+            // 부분 유일 인덱스(경당 대표 1개)는 문장 단위로 검사되므로 먼저 내리고 올린다.
+            await using var tx = await Db.Database.BeginTransactionAsync(ct);
             await Db.Set<CanonWorkIdentifier>().Alive()
                 .Where(x => x.WorkId == workId && x.IsPrimary)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPrimary, false), ct);
-        }
 
-        var e = new CanonWorkIdentifier { WorkId = workId, Scheme = item.Scheme, Value = item.Value, IsPrimary = wantsPrimary };
-        Db.Add(e);
-        await SaveAsync(ct);
-        await tx.CommitAsync(ct);
-        return e;
-    }
+            target.IsPrimary = true;
+            Touch(target);
+            await SaveAsync(ct);
+            await tx.CommitAsync(ct);
+        });
 
-    public async Task SetPrimaryIdentifierAsync(long workId, long identifierId, CancellationToken ct)
-    {
-        var target = await Db.Set<CanonWorkIdentifier>().Alive()
-            .FirstOrDefaultAsync(x => x.Id == identifierId && x.WorkId == workId, ct)
-            ?? throw Rule.NotFound("식별자", identifierId);
-        if (target.IsPrimary) return;
-
-        // 부분 유일 인덱스(경당 대표 1개)는 문장 단위로 검사되므로 먼저 내리고 올린다.
-        await using var tx = await Db.Database.BeginTransactionAsync(ct);
-        await Db.Set<CanonWorkIdentifier>().Alive()
-            .Where(x => x.WorkId == workId && x.IsPrimary)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPrimary, false), ct);
-
-        target.IsPrimary = true;
-        Touch(target);
-        await SaveAsync(ct);
-        await tx.CommitAsync(ct);
-    }
-
-    public async Task RemoveIdentifierAsync(long workId, long identifierId, CancellationToken ct)
-    {
-        var target = await Db.Set<CanonWorkIdentifier>().Alive()
-            .FirstOrDefaultAsync(x => x.Id == identifierId && x.WorkId == workId, ct)
-            ?? throw Rule.NotFound("식별자", identifierId);
-
-        await using var tx = await Db.Database.BeginTransactionAsync(ct);
-
-        var wasPrimary = target.IsPrimary;
-        target.IsPrimary = false;
-        SoftDelete(target);
-        await SaveAsync(ct);
-
-        // 대표를 지웠다면 가장 먼저 등록된 나머지를 대표로 승격
-        if (wasPrimary)
+    public Task<Result> RemoveIdentifierAsync(long workId, long identifierId, CancellationToken ct)
+        => ScriptureResults.RunAsync(async () =>
         {
-            var next = await Db.Set<CanonWorkIdentifier>().Alive()
-                .Where(x => x.WorkId == workId).OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
-            if (next is not null)
+            var target = await Db.Set<CanonWorkIdentifier>().Alive()
+                .FirstOrDefaultAsync(x => x.Id == identifierId && x.WorkId == workId, ct)
+                ?? throw Rule.NotFound("식별자", identifierId);
+
+            await using var tx = await Db.Database.BeginTransactionAsync(ct);
+
+            var wasPrimary = target.IsPrimary;
+            target.IsPrimary = false;
+            SoftDelete(target);
+            await SaveAsync(ct);
+
+            // 대표를 지웠다면 가장 먼저 등록된 나머지를 대표로 승격
+            if (wasPrimary)
             {
-                next.IsPrimary = true;
-                Touch(next);
-                await SaveAsync(ct);
+                var next = await Db.Set<CanonWorkIdentifier>().Alive()
+                    .Where(x => x.WorkId == workId).OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+                if (next is not null)
+                {
+                    next.IsPrimary = true;
+                    Touch(next);
+                    await SaveAsync(ct);
+                }
             }
-        }
 
-        await tx.CommitAsync(ct);
-    }
+            await tx.CommitAsync(ct);
+        });
 
-    /// <summary>"SN 12.2", "t99" 같은 번호로 경을 찾는다. scheme 이 달라 겹칠 수 있어 목록으로 돌려준다.</summary>
-    public async Task<IReadOnlyList<WorkMatch>> FindByIdentifierAsync(string raw, string? scheme, CancellationToken ct)
-    {
-        var value = ScriptureText.NormalizeIdentifier(raw);
-        if (value.Length == 0) return [];
-        var lower = value.ToLowerInvariant();
-
-        var q = Db.Set<CanonWorkIdentifier>().AsNoTracking().Alive().Where(x => x.Value.ToLower() == lower);
-        if (scheme is not null)
+    public Task<Result<IReadOnlyList<Schema.Identifier.Match>>> FindByIdentifierAsync(string value, string? scheme, CancellationToken ct)
+        => ScriptureResults.RunAsync<IReadOnlyList<Schema.Identifier.Match>>(async () =>
         {
-            var sch = NormalizeScheme(scheme);
-            q = q.Where(x => x.Scheme == sch);
-        }
+            var normalized = ScriptureText.NormalizeIdentifier(value);
+            if (normalized.Length == 0) return [];
+            var lower = normalized.ToLowerInvariant();
 
-        return await q
-            .Where(x => x.Work.DeletedAt == null)
-            .OrderBy(x => x.Work.SortOrder)
-            .Select(x => new WorkMatch(x.WorkId, x.Work.CollectionId, x.Work.Code, x.Work.TitleKo, x.Scheme, x.Value))
-            .Take(20)
-            .ToListAsync(ct);
-    }
+            var q = Db.Set<CanonWorkIdentifier>().AsNoTracking().Alive().Where(x => x.Value.ToLower() == lower);
+            if (scheme is not null)
+            {
+                var sch = NormalizeScheme(scheme);
+                q = q.Where(x => x.Scheme == sch);
+            }
 
-    public async Task<WorkDetail> GetDetailAsync(long id, bool includeUnpublishedEditions, CancellationToken ct)
-    {
-        var w = await Db.Set<CanonWork>().AsNoTracking().Alive().FirstOrDefaultAsync(x => x.Id == id, ct)
-            ?? throw Rule.NotFound("경", id);
+            return await q
+                .Where(x => x.Work.DeletedAt == null)
+                .OrderBy(x => x.Work.SortOrder)
+                .Select(x => new Schema.Identifier.Match
+                {
+                    WorkId = x.WorkId, CollectionId = x.Work.CollectionId, Code = x.Work.Code,
+                    TitleKo = x.Work.TitleKo, Scheme = x.Scheme, Value = x.Value,
+                })
+                .Take(20)
+                .ToListAsync(ct);
+        });
 
-        var identifiers = await Db.Set<CanonWorkIdentifier>().AsNoTracking().Alive()
-            .Where(x => x.WorkId == id)
-            .OrderByDescending(x => x.IsPrimary).ThenBy(x => x.Id)
-            .Select(x => new WorkDetail.IdentifierView(x.Id, x.Scheme, x.Value, x.IsPrimary))
-            .ToListAsync(ct);
-
-        var editions = await Db.Set<CanonEdition>().AsNoTracking().Alive()
-            .Where(x => x.WorkId == id && (includeUnpublishedEditions || x.Status == EditionStatus.Published))
-            .OrderBy(x => x.LanguageCode).ThenBy(x => x.Kind).ThenBy(x => x.Id)
-            .Select(x => new WorkDetail.EditionView(x.Id, x.LanguageCode, x.Script, x.Kind, x.Revision, x.Status, x.SegmentCount, x.TranslatorName))
-            .ToListAsync(ct);
-
-        return new WorkDetail(w.Id, w.CollectionId, w.GroupId, w.Code, w.TitleKo, w.TitleOriginal, w.TitleRoman, w.Summary, identifiers, editions);
-    }
-
-    // ───────────────────────── 식별자 보조 ─────────────────────────
+    // ═════════════════════ 식별자 보조 ═════════════════════
 
     /// <summary>체계 코드: 대문자 영숫자와 - _ (예: SC, PTS, VRI, T, CBETA, KBC), 32자 이내.</summary>
     private static string NormalizeScheme(string? raw)
@@ -258,9 +297,9 @@ public sealed class WorkService(ScriptureDbContext db) : ScriptureServiceBase(db
         return s;
     }
 
-    private static List<IdentifierInput> PrepareIdentifiers(IReadOnlyList<IdentifierInput>? raw)
+    private static List<Schema.Identifier.Request> PrepareIdentifiers(IEnumerable<Schema.Identifier.Request>? raw)
     {
-        var list = new List<IdentifierInput>();
+        var list = new List<Schema.Identifier.Request>();
         if (raw is null) return list;
 
         var seen = new HashSet<(string, string)>();
@@ -279,7 +318,7 @@ public sealed class WorkService(ScriptureDbContext db) : ScriptureServiceBase(db
         return list;
     }
 
-    private async Task EnsureIdentifiersFreeAsync(IReadOnlyList<IdentifierInput> items, long? excludeWorkId, CancellationToken ct)
+    private async Task EnsureIdentifiersFreeAsync(IReadOnlyList<Schema.Identifier.Request> items, long? excludeWorkId, CancellationToken ct)
     {
         foreach (var item in items)
         {

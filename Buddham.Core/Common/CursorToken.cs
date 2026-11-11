@@ -66,6 +66,23 @@ public static class CursorToken
             && payload.Id > 0;
     }
 
+    /// <summary>단일 키(SortOrder, Id 등) 기반 커서</summary>
+    public static string CreateKeyToken(long key)
+        => Convert.ToBase64String(Encoding.UTF8.GetBytes($"k:{key}"));
+
+    public static long ParseKeyToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return 0;
+        try
+        {
+            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(token));
+            if (raw.StartsWith("k:") && long.TryParse(raw[2..], out var key)) return key;
+        }
+        catch { /* ignored */}
+        return 0;
+    }
+
+
     public static string CreateVectorToken(int offset, string keyword, float threshold)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(offset);

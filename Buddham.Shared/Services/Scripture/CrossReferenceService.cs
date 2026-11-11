@@ -6,16 +6,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Buddham.Shared.Services.Scripture;
 
-public sealed record ParallelInput(
-    long FromWorkId, long ToWorkId, ParallelKind Kind,
-    long? FromSegmentId, long? ToSegmentId, string? Note);
+public sealed record ParallelInput(long FromWorkId, long ToWorkId, ParallelKind Kind, long? FromSegmentId, long? ToSegmentId, string? Note);
 
-public sealed record ParallelView(
-    long Id, bool Outbound, long OtherWorkId, string OtherWorkCode, string OtherWorkTitleKo,
+public sealed record ParallelView(long Id, bool Outbound, long OtherWorkId, string OtherWorkCode, string OtherWorkTitleKo,
     ParallelKind Kind, long? ThisSegmentId, long? OtherSegmentId, string? Note);
 
-public sealed record TopicInput(
-    long? ParentId, string Code, string NameKo, string? NamePali, string? NameSanskrit, string? Description, int SortOrder);
+public sealed record TopicInput(long? ParentId, string Code, string NameKo, string? NamePali, string? NameSanskrit, string? Description, int SortOrder);
 
 /// <summary>병행경: 서로 다른 경(Work) 사이의 관계. 작품 단위 또는 세그먼트 단위로 건다.</summary>
 public sealed class ParallelService(ScriptureDbContext db) : ScriptureServiceBase(db)
@@ -42,8 +38,11 @@ public sealed class ParallelService(ScriptureDbContext db) : ScriptureServiceBas
 
         var e = new CanonParallel
         {
-            FromWorkId = a, ToWorkId = b, Kind = kind,
-            FromSegmentId = sa, ToSegmentId = sb,
+            FromWorkId = a,
+            ToWorkId = b,
+            Kind = kind,
+            FromSegmentId = sa,
+            ToSegmentId = sb,
             Note = ScriptureText.Blank(i.Note),
         };
         Db.Add(e);
@@ -69,9 +68,17 @@ public sealed class ParallelService(ScriptureDbContext db) : ScriptureServiceBas
             .OrderBy(p => p.Id)
             .Select(p => new
             {
-                p.Id, p.Kind, p.Note, p.FromWorkId, p.ToWorkId, p.FromSegmentId, p.ToSegmentId,
-                FromCode = p.FromWork.Code, FromTitle = p.FromWork.TitleKo,
-                ToCode = p.ToWork.Code, ToTitle = p.ToWork.TitleKo,
+                p.Id,
+                p.Kind,
+                p.Note,
+                p.FromWorkId,
+                p.ToWorkId,
+                p.FromSegmentId,
+                p.ToSegmentId,
+                FromCode = p.FromWork.Code,
+                FromTitle = p.FromWork.TitleKo,
+                ToCode = p.ToWork.Code,
+                ToTitle = p.ToWork.TitleKo,
             })
             .ToListAsync(ct);
 
@@ -88,9 +95,17 @@ public sealed class ParallelService(ScriptureDbContext db) : ScriptureServiceBas
             .OrderBy(p => p.Id)
             .Select(p => new
             {
-                p.Id, p.Kind, p.Note, p.FromWorkId, p.ToWorkId, p.FromSegmentId, p.ToSegmentId,
-                FromCode = p.FromWork.Code, FromTitle = p.FromWork.TitleKo,
-                ToCode = p.ToWork.Code, ToTitle = p.ToWork.TitleKo,
+                p.Id,
+                p.Kind,
+                p.Note,
+                p.FromWorkId,
+                p.ToWorkId,
+                p.FromSegmentId,
+                p.ToSegmentId,
+                FromCode = p.FromWork.Code,
+                FromTitle = p.FromWork.TitleKo,
+                ToCode = p.ToWork.Code,
+                ToTitle = p.ToWork.TitleKo,
             })
             .ToListAsync(ct);
 
@@ -190,8 +205,11 @@ public sealed class TopicService(ScriptureDbContext db) : ScriptureServiceBase(d
         {
             existing = new CanonSegmentTopic
             {
-                SegmentId = segmentId, TopicId = topicId, Source = source,
-                Confidence = confidence, Note = ScriptureText.Blank(note),
+                SegmentId = segmentId,
+                TopicId = topicId,
+                Source = source,
+                Confidence = confidence,
+                Note = ScriptureText.Blank(note),
             };
             Db.Add(existing);
         }

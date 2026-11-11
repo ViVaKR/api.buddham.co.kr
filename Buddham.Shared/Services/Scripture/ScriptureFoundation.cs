@@ -3,6 +3,7 @@ using Buddham.Core.Common;
 using Buddham.Core.Common.Primitives;
 using Buddham.Core.Common.Results;
 using Buddham.Core.Interfaces;
+using Buddham.Core.Interfaces.Cache;
 using Buddham.Core.Interfaces.Scripture;
 using Buddham.Core.Scriptures;
 using Buddham.Shared.Data;
@@ -56,6 +57,32 @@ public static class ScriptureResults
         }
     }
 
+    /// <summary>오프셋 페이징 응답용. 규칙 위반은 같은 봉투(IsSuccess=false)로 돌려준다.</summary>
+    public static async Task<OffsetPagedResult<T>> RunOffsetAsync<T>(Func<Task<OffsetPagedResult<T>>> action)
+    {
+        try
+        {
+            return await action();
+        }
+        catch (ScriptureRuleException ex)
+        {
+            return new OffsetPagedResult<T> { IsSuccess = false, Message = ex.Message, Code = ex.Failure.ToRsCode() };
+        }
+    }
+
+    /// <summary>커서 페이징 응답용.</summary>
+    public static async Task<CursorPagedResult<T>> RunCursorAsync<T>(Func<Task<CursorPagedResult<T>>> action)
+    {
+        try
+        {
+            return await action();
+        }
+        catch (ScriptureRuleException ex)
+        {
+            return new CursorPagedResult<T> { IsSuccess = false, Message = ex.Message, Code = ex.Failure.ToRsCode() };
+        }
+    }
+
     public static async Task<Result> RunAsync(Func<Task> action)
     {
         try
@@ -81,7 +108,9 @@ public static class ScriptureQueryExtensions
 
 // ───────────────────────── 서비스 베이스 ─────────────────────────
 
-public abstract class ScriptureServiceBase(ScriptureDbContext db)
+/// <param name="db">경전 DbContext</param>
+/// <param name="cache">캐시를 무효화해야 하는(트리 등을 바꾸는) 서비스만 넘긴다. 읽기 전용 서비스는 생략.</param>
+public abstract class ScriptureServiceBase(ScriptureDbContext db, IRedisCacheService? cache = null)
 {
     private const int MaxTreeDepth = 32;
 
@@ -113,6 +142,10 @@ public abstract class ScriptureServiceBase(ScriptureDbContext db)
     protected ScriptureDbContext Db { get; } = db;
 
     protected static DateTime Now => DateTime.UtcNow;
+
+    /// <summary>접두어로 시작하는 캐시를 지운다. 저장이 성공한 뒤에만 호출한다.</summary>
+    protected Task InvalidateAsync(string prefix)
+        => cache is null ? Task.CompletedTask : cache.RemoveByPrefixAsync(prefix);
 
     // ----- 조회 -----
 

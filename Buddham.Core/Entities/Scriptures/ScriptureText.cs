@@ -8,6 +8,8 @@ namespace Buddham.Core.Scriptures;
 
 /// <summary>
 /// 경전 텍스트에 관한 순수 규칙. 인프라(EF, HTTP 등)에 의존하지 않는다.
+/// 코드, 언어, SegmentRef 정규화
+/// 발음부호를 뺀 검색용 정규화, 해시, 사경 정확도를 맡음
 /// </summary>
 public static partial class ScriptureText
 {

@@ -271,6 +271,10 @@ public static class ServiceCollectionExtensions
         // ================== [개별댓글 서비스] ==================
         services.AddScoped(sp => new GenericCommentService<GuideComment, GuideCommentLike>(sp.GetRequiredService<PublicDbContext>()));
         services.AddScoped(x => new GenericCommentService<TangwhaComment, TangwhaCommentLike>(x.GetRequiredService<PublicDbContext>()));
+
+        // ================== [Scripture 경전 서비스] ==================
+        services.AddScriptureServices();
+
         return services;
     }
 
