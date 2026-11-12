@@ -7,7 +7,6 @@ using Buddham.Core.Entities.Auth;
 using Buddham.Core.Interfaces.Auth;
 using Buddham.Shared.Constants;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.CodeAnalysis.Options;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 

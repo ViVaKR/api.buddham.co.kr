@@ -13,10 +13,9 @@
         <PackageReference Include="MailKit" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" />
-        <PackageReference Include="Microsoft.AspNetCore.Identity" />
         <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
-        <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" />
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
         <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
@@ -28,8 +27,6 @@
         <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
         <PackageReference Include="Snappier" />
         <PackageReference Include="StackExchange.Redis" />
-        <PackageReference Include="System.Security.Cryptography.Xml" />
-        <PackageReference Include="ViVaKR.Chat" />
     </ItemGroup>
 
 </Project>

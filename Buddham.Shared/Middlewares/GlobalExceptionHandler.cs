@@ -27,6 +27,7 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, IWeb
         var (code, message) = exception switch
         {
             BuddhamException bex => (bex.Code, bex.Message),
+
             // 1. 토큰 디코딩 실패 (Base64 형식 오류)
             FormatException => (RsCode.BadRequest, "잘못된 토큰 형식입니다. 잠시 후 다시 요청부탁합니다."),
 
