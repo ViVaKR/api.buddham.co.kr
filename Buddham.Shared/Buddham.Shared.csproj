@@ -8,13 +8,13 @@
     </ItemGroup>
 
     <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="EFCore.NamingConventions" />
         <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
         <PackageReference Include="MailKit" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" />
         <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
-        <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
         <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />

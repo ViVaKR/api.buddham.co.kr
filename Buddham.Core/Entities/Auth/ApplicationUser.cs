@@ -23,6 +23,6 @@ public class ApplicationUser : IdentityUser<Guid>, IAuditable, ISoftDeletable
     public string Locale { get; set; } = "ko-KR";
     public bool IsDeleted => DeletedAt.HasValue;
     public uint RowVersion { get; set; }
-    public virtual ICollection<ApplicationUserRole> UserRoles { get; set; } = [];
     public DateTime? DeletedAt { get; set; }
+    public virtual ICollection<ApplicationUserRole> UserRoles { get; set; } = [];
 }

@@ -2,7 +2,7 @@ using Buddham.Shared.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// * Protection
+// * Data Protection
 builder.Services.AddCommonDataProtection(builder.Configuration, builder.Environment, builder.Logging);
 
 // * 1 인프라
@@ -12,7 +12,7 @@ builder.Services.AddInfrastructureConfigs(builder.Configuration);
 builder.Services.AddControllerServices();
 
 // * 4. Identity
-builder.Services.AddIndentityConfiguration();
+builder.Services.AddIdentityConfiguration();
 
 // * 3 JWT Authentication
 builder.Services.AddJwtAuthentication(builder.Configuration);

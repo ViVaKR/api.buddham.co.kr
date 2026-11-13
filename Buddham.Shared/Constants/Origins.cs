@@ -5,7 +5,6 @@ namespace Buddham.Shared.Constants;
 public static partial class Origins
 {
     /// <summary>
-    /// 도메인:
     /// buddham.co.kr,
     /// kimbumjun.com,
     /// kimbumjun.co.kr,
@@ -14,8 +13,7 @@ public static partial class Origins
     /// vivakr.com,
     /// writer.or.kr
     /// 로 끝나고 앞에 서브도메인이 붙거나 안 붙거나(https://)
-    ///  로컬 도메인:
-    /// http://localhost:포트번호 또는 http://127.0.0.1:포트번호 
+    /// http://localhost:포트번호 또는 http://127.0.0.1:포트번호
     /// </summary>
     public static readonly Regex AllowedOriginsRegex = MyRegex();
 

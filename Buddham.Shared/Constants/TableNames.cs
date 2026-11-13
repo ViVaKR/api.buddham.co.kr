@@ -3,10 +3,7 @@ namespace Buddham.Shared.Constants;
 public class TableNames
 {
     // Public
-    public const string SutraCopying = "sutra_copyings";
     public const string FileDatas = "file_datas";
-    public const string AppleSyscalls = "apple_syscalls";
-    public const string Codes = "codes";
 
     // Auth
     public const string Users = "users";

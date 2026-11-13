@@ -13,7 +13,9 @@ namespace Buddham.Shared.Middlewares;
 /// 전역 오류 처리
 /// IExceptionHandler 는 보조안전망
 /// </summary>
-public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, IWebHostEnvironment env)
+public class GlobalExceptionHandler(
+    ILogger<GlobalExceptionHandler> logger,
+    IWebHostEnvironment env)
     : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(

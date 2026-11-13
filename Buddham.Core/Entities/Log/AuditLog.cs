@@ -19,10 +19,6 @@ public class AuditLog
     public string? OldValue { get; set; } // JSON 직렬화
     public string? NewValue { get; set; } // JSON 직렬화
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    // public Vector? Embedding { get; set; }
     public float[]? Embedding { get; set; }
-    
-    // public NpgsqlTsVector? SearchVector { get; set; }
     public string? SearchVector { get; set; }
 }

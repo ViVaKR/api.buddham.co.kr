@@ -46,7 +46,6 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// (1) 인프라
-    /// 기술적 설정 모음
     /// </summary>
     public static IServiceCollection AddInfrastructureConfigs(
         this IServiceCollection services,
@@ -138,6 +137,7 @@ public static class ServiceCollectionExtensions
     {
         // 🛠️ 개발 환경이 아닐 때만 Redis 연합군 투입!
         if (environment.IsDevelopment()) return services;
+
         var redisConn = configuration.GetConnectionString(AppInfrastructure.RedisConnection)
                         ?? throw new InvalidOperationException("Redis connection string is missing for DataProtection!");
 
@@ -170,7 +170,7 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// 4. Identity 보안설정
     /// </summary>
-    public static IServiceCollection AddIndentityConfiguration(this IServiceCollection services)
+    public static IServiceCollection AddIdentityConfiguration(this IServiceCollection services)
     {
         services.AddIdentity<ApplicationUser, ApplicationRole>(x =>
             {
